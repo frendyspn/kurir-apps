@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Memoized Transaksi Item Component
 const TransaksiItem = memo(({ item, onPress }: { item: any; onPress: (item: any) => void }) => {
@@ -368,6 +369,7 @@ const DetailModal = memo(({ transaksi, onClose, onRefresh }: { transaksi: any; o
 DetailModal.displayName = 'DetailModal';
 
 export default function TransaksiManualScreen() {
+    const insets = useSafeAreaInsets();
     const [startDate, setStartDate] = useState<Date>(new Date());
     const [endDate, setEndDate] = useState<Date>(new Date());
     const [serviceType, setServiceType] = useState<string>('');
@@ -582,7 +584,10 @@ export default function TransaksiManualScreen() {
             </View>
 
             {/* Content */}
-            <ScrollView style={styles.content}>
+            <ScrollView 
+                style={styles.content}
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 60 }}
+            >
                 {/* Filter Section */}
                 <View style={styles.filterSection}>
                     <TouchableOpacity 

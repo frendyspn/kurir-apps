@@ -7,8 +7,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TambahTransaksiScreen() {
+    const insets = useSafeAreaInsets();
     const [loading, setLoading] = useState(false);
     const [tanggal, setTanggal] = useState<Date>(new Date());
     const [agenKurir, setAgenKurir] = useState<string>('');
@@ -245,7 +247,10 @@ export default function TambahTransaksiScreen() {
             </View>
 
             {/* Content */}
-            <ScrollView style={styles.content}>
+            <ScrollView 
+                style={styles.content}
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 40 }}
+            >
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Form Transaksi Manual</Text>
                     
@@ -288,20 +293,47 @@ export default function TambahTransaksiScreen() {
                     />
 
                     {/* Layanan */}
-                    {loadingLayanan ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="small" color="#0d6efd" />
-                            <Text style={styles.loadingText}>Memuat layanan...</Text>
-                        </View>
-                    ) : (
-                        <DropdownInput
-                            label="Layanan"
-                            value={layanan}
-                            onChange={setLayanan}
-                            options={layananOptions}
-                            placeholder="Pilih layanan"
-                        />
-                    )}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>Layanan *</Text>
+                        {loadingLayanan ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="small" color="#0d6efd" />
+                                <Text style={styles.loadingText}>Memuat layanan...</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.layananButtonContainer}>
+                                {layananOptions.map((option) => (
+                                    <TouchableOpacity
+                                        key={option.value}
+                                        style={[
+                                            styles.layananButton,
+                                            layanan === option.value && styles.layananButtonActive
+                                        ]}
+                                        onPress={() => setLayanan(option.value)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons 
+                                            name={
+                                                option.value === 'RIDE' ? 'bicycle' :
+                                                option.value === 'SEND' ? 'cube' :
+                                                option.value === 'FOOD' ? 'restaurant' :
+                                                option.value === 'SHOP' ? 'cart' :
+                                                'ellipse'
+                                            } 
+                                            size={24} 
+                                            color={layanan === option.value ? '#ffffff' : '#0d6efd'} 
+                                        />
+                                        <Text style={[
+                                            styles.layananButtonText,
+                                            layanan === option.value && styles.layananButtonTextActive
+                                        ]}>
+                                            {option.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </View>
 
                     {/* Nama Resto/Toko - Only show for FOOD or SHOP */}
                     {(layanan === 'FOOD' || layanan === 'SHOP') && (
@@ -508,6 +540,42 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         fontSize: 14,
         color: '#212529',
+    },
+    layananButtonContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+    },
+    layananButton: {
+        flex: 1,
+        minWidth: '45%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#ffffff',
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: '#0d6efd',
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        gap: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    layananButtonActive: {
+        backgroundColor: '#0d6efd',
+        borderColor: '#0d6efd',
+    },
+    layananButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#0d6efd',
+    },
+    layananButtonTextActive: {
+        color: '#ffffff',
     },
     submitButton: {
         flexDirection: 'row',

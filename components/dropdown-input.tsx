@@ -13,9 +13,11 @@ interface DropdownInputProps {
     onChange: (value: string) => void;
     options: DropdownOption[];
     placeholder?: string;
+    error?: string;
+    disabled?: boolean;
 }
 
-export default function DropdownInput({ label, value, onChange, options, placeholder }: DropdownInputProps) {
+export default function DropdownInput({ label, value, onChange, options, placeholder, error, disabled }: DropdownInputProps) {
     const [showModal, setShowModal] = useState(false);
 
     const selectedOption = options.find(opt => opt.value === value);
@@ -24,14 +26,28 @@ export default function DropdownInput({ label, value, onChange, options, placeho
         <View style={styles.container}>
             <Text style={styles.label}>{label}</Text>
             <TouchableOpacity 
-                style={styles.input}
-                onPress={() => setShowModal(true)}
+                style={[
+                    styles.input, 
+                    error && styles.inputError,
+                    disabled && styles.inputDisabled
+                ]}
+                onPress={() => !disabled && setShowModal(true)}
+                disabled={disabled}
             >
-                <Text style={[styles.inputText, !value && styles.placeholder]}>
+                <Text style={[
+                    styles.inputText, 
+                    !value && styles.placeholder,
+                    disabled && styles.textDisabled
+                ]}>
                     {selectedOption ? selectedOption.label : (placeholder || 'Pilih opsi')}
                 </Text>
-                <Ionicons name="chevron-down-outline" size={20} color="#6c757d" />
+                <Ionicons 
+                    name="chevron-down-outline" 
+                    size={20} 
+                    color={disabled ? '#ced4da' : '#6c757d'} 
+                />
             </TouchableOpacity>
+            {error && <Text style={styles.errorText}>{error}</Text>}
 
             <Modal
                 visible={showModal}
@@ -112,6 +128,22 @@ const styles = StyleSheet.create({
     },
     placeholder: {
         color: '#adb5bd',
+    },
+    inputError: {
+        borderColor: '#dc3545',
+        borderWidth: 1.5,
+    },
+    inputDisabled: {
+        backgroundColor: '#f8f9fa',
+        opacity: 0.6,
+    },
+    textDisabled: {
+        color: '#ced4da',
+    },
+    errorText: {
+        fontSize: 12,
+        color: '#dc3545',
+        marginTop: 4,
     },
     modalOverlay: {
         flex: 1,

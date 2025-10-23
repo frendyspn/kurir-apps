@@ -29,4 +29,10 @@ export const API_ENDPOINTS = {
     LIST_PELANGGAN: `${API_BASE_URL}/kurir/v1/list-pelanggan`,
     TAMBAH_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/save-transaksi-manual`,
     APPROVE_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/approve-transaksi-manual`,
+    CEK_NO_HP_REGISTRATION: `${API_BASE_URL}/kurir/register/cek-no-hp`,
+    GET_PROVINSI: `${API_BASE_URL}/kurir/register/get-provinsi`,
+    GET_KOTA: `${API_BASE_URL}/kurir/register/get-kota`,
+    GET_KECAMATAN: `${API_BASE_URL}/kurir/register/get-kecamatan`,
+    SEND_OTP_REGISTER: `${API_BASE_URL}/kurir/register/send-otp`,
+    VERIFY_OTP_REGISTER: `${API_BASE_URL}/kurir/register/verify-otp`,
 };

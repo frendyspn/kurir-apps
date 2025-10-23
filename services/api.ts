@@ -188,6 +188,17 @@ class ApiService {
     });
   }
 
+  // Cek No HP Registration
+  async cekNoHpRegistration(phoneNumber: string): Promise<ApiResponse> {
+    const formData = new FormData();
+    formData.append('no_hp', phoneNumber);
+
+    return this.request(API_ENDPOINTS.CEK_NO_HP_REGISTRATION, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
   // Get List Pelanggan
   async getListPelanggan(phoneNumber: string, query?: string): Promise<ApiResponse> {
     const formData = new FormData();
@@ -268,6 +279,79 @@ class ApiService {
     formData.append('agen_kurir', '-');
 
     return this.request(API_ENDPOINTS.APPROVE_TRANSAKSI_MANUAL, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  // Get Provinsi
+  async getProvinsi(): Promise<ApiResponse> {
+    return this.request(API_ENDPOINTS.GET_PROVINSI, {
+      method: 'GET',
+    });
+  }
+
+  // Get Kota by Provinsi ID
+  async getKota(provinsiId: string): Promise<ApiResponse> {
+    const formData = new FormData();
+    formData.append('provinsi_id', provinsiId);
+
+    return this.request(API_ENDPOINTS.GET_KOTA, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  // Get Kecamatan by Kota ID
+  async getKecamatan(kotaId: string): Promise<ApiResponse> {
+    const formData = new FormData();
+    formData.append('kota_id', kotaId);
+
+    return this.request(API_ENDPOINTS.GET_KECAMATAN, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async sendOtpRegister(phoneNumber: string): Promise<ApiResponse> {
+    const formData = new FormData();
+    formData.append('no_hp', phoneNumber);
+
+    return this.request(API_ENDPOINTS.SEND_OTP_REGISTER, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  // Verify OTP and Register User
+  async verifyOtpRegister(data: {
+    no_hp: string;
+    nama_lengkap: string;
+    email: string;
+    jenis_kelamin: string;
+    tanggal_lahir: string;
+    tempat_lahir: string;
+    provinsi_id: string;
+    kota_id: string;
+    kecamatan_id: string;
+    alamat: string;
+    otp: string;
+  }): Promise<ApiResponse> {
+    const formData = new FormData();
+    
+    formData.append('no_hp', data.no_hp);
+    formData.append('nama_lengkap', data.nama_lengkap);
+    formData.append('email', data.email);
+    formData.append('jenis_kelamin', data.jenis_kelamin);
+    formData.append('tanggal_lahir', data.tanggal_lahir);
+    formData.append('tempat_lahir', data.tempat_lahir);
+    formData.append('provinsi_id', data.provinsi_id);
+    formData.append('kota_id', data.kota_id);
+    formData.append('kecamatan_id', data.kecamatan_id);
+    formData.append('alamat', data.alamat);
+    formData.append('otp', data.otp);
+
+    return this.request(API_ENDPOINTS.VERIFY_OTP_REGISTER, {
       method: 'POST',
       body: formData,
     });

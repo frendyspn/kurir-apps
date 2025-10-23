@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackHandler, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
 import OrderChart from '../../components/charts/order-chart';
 import PendapatanChart from '../../components/charts/pendapatan-chart';
@@ -10,6 +11,7 @@ import { APP_NAME } from '../../constant';
 import { apiService } from '../../services/api';
 
 function HomeScreen() {
+    const insets = useSafeAreaInsets();
     const [saldo, setSaldo] = useState(0);
     const [showSaldo, setShowSaldo] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -81,7 +83,16 @@ function HomeScreen() {
         fetchUserData();
     }, []);
 
-    
+    // Handle hardware back button
+    useEffect(() => {
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+            // Exit app when back button is pressed on home screen
+            BackHandler.exitApp();
+            return true; // Prevent default behavior
+        });
+
+        return () => backHandler.remove();
+    }, []);
 
     // Memoize format currency function
     const formatCurrency = useCallback((amount: number) => {
@@ -257,7 +268,8 @@ function HomeScreen() {
                 {/* Grafik Jenis Order */}
                 {memoizedJenisOrderChart}
 
-                <View style={{ height: 32 }} />
+                {/* Bottom Spacing for Tab Bar */}
+                <View style={{ height: Math.max(insets.bottom, 20) + 80 }} />
             </ScrollView>
         </View>
     );

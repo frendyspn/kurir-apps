@@ -1,12 +1,11 @@
-import { Stack, useRouter } from 'expo-router';
+import { apiService } from '@/services/api';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Button from '../../components/button';
-import Input from '../../components/input';
-import { APP_NAME } from '../../constant';
-import { apiService } from '../../services/api';
+import Button from '../../../components/button';
+import Input from '../../../components/input';
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
     const router = useRouter();
     const [phoneNumber, setPhoneNumber] = useState('');
     const [error, setError] = useState('');
@@ -17,7 +16,7 @@ export default function LoginScreen() {
         return phoneRegex.test(phone);
     };
 
-    const handleLogin = async () => {
+    const handleNext = async () => {
         setError('');
 
         if (!phoneNumber) {
@@ -33,24 +32,24 @@ export default function LoginScreen() {
         setLoading(true);
 
         try {
-            const result = await apiService.login(phoneNumber);
-
-            if (result.success) {
-                console.log('Login successful:', result.data);
-                
-                // Navigate ke OTP screen
+            // Call API to check if phone number exists
+            const result = await apiService.cekNoHpRegistration(phoneNumber);
+            
+            if (result.data.success) {
+                // Navigate ke detail screen dengan phone number dan status registrasi
                 router.push({
-                    pathname: '/auth/otp',
+                    pathname: '/auth/register/detail',
                     params: { 
                         phone: phoneNumber,
-                        otp: result.data?.Message // Untuk development
+                        isRegistered: result.data?.registered ? 'true' : 'false',
+                        existingData: result.data?.data ? JSON.stringify(result.data.data) : ''
                     }
                 });
             } else {
-                setError(result.message || 'Login gagal, silakan coba lagi');
+                setError(result.data.message || 'Gagal memeriksa nomor HP');
             }
         } catch (err) {
-            console.error('Login error:', err);
+            console.error('Check phone error:', err);
             setError('Terjadi kesalahan, silakan coba lagi');
         } finally {
             setLoading(false);
@@ -59,11 +58,6 @@ export default function LoginScreen() {
 
     return (
         <>
-            <Stack.Screen
-                options={{
-                    headerShown: false,
-                }}
-            />
             <KeyboardAvoidingView
                 style={styles.container}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -74,9 +68,9 @@ export default function LoginScreen() {
                 >
                     <View style={styles.content}>
                         <View style={styles.header}>
-                            <Text style={styles.title}>{APP_NAME}</Text>
+                            <Text style={styles.title}>Daftar Akun</Text>
                             <Text style={styles.subtitle}>
-                                Masukkan nomor HP Anda untuk masuk
+                                Masukkan nomor HP Anda untuk mendaftar
                             </Text>
                         </View>
 
@@ -95,37 +89,28 @@ export default function LoginScreen() {
                             />
 
                             <Button
-                                title="Masuk"
-                                onPress={handleLogin}
+                                title="Lanjutkan"
+                                onPress={handleNext}
                                 loading={loading}
                                 variant="primary"
                             />
                         </View>
 
-                        {/* Divider */}
-                        <View style={styles.dividerContainer}>
-                            <View style={styles.dividerLine} />
-                            <Text style={styles.dividerText}>atau</Text>
-                            <View style={styles.dividerLine} />
-                        </View>
-
-                        {/* Register Section */}
-                        <View style={styles.registerSection}>
-                            <Text style={styles.registerText}>
-                                Belum punya akun?
-                            </Text>
-                            <Button
-                                title="Daftar Sekarang"
-                                onPress={() => {
-                                    router.push('/auth/register');
-                                }}
-                                variant="outline"
-                            />
-                        </View>
-
                         <View style={styles.footer}>
                             <Text style={styles.footerText}>
-                                Dengan masuk, Anda menyetujui{' '}
+                                Sudah punya akun?{' '}
+                                <Text 
+                                    style={styles.link}
+                                    onPress={() => router.back()}
+                                >
+                                    Masuk di sini
+                                </Text>
+                            </Text>
+                        </View>
+
+                        <View style={styles.termsFooter}>
+                            <Text style={styles.termsText}>
+                                Dengan mendaftar, Anda menyetujui{' '}
                                 <Text style={styles.link}>Syarat & Ketentuan</Text>
                                 {' '}dan{' '}
                                 <Text style={styles.link}>Kebijakan Privasi</Text>
@@ -170,37 +155,21 @@ const styles = StyleSheet.create({
     },
     form: {
         marginBottom: 24,
-    },
-    dividerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 24,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#dee2e6',
-    },
-    dividerText: {
-        fontSize: 14,
-        color: '#6c757d',
-        paddingHorizontal: 16,
-        fontWeight: '500',
-    },
-    registerSection: {
-        marginBottom: 24,
-        gap: 12,
-    },
-    registerText: {
-        fontSize: 15,
-        color: '#212529',
-        textAlign: 'center',
-        fontWeight: '500',
+        gap: 16,
     },
     footer: {
         marginTop: 24,
+        alignItems: 'center',
     },
     footerText: {
+        fontSize: 15,
+        color: '#212529',
+        textAlign: 'center',
+    },
+    termsFooter: {
+        marginTop: 16,
+    },
+    termsText: {
         fontSize: 12,
         color: '#6c757d',
         textAlign: 'center',
@@ -208,6 +177,6 @@ const styles = StyleSheet.create({
     },
     link: {
         color: '#0d6efd',
-        fontWeight: '500',
+        fontWeight: '600',
     },
 });

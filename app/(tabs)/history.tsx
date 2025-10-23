@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
 import OrderChart from '../../components/charts/order-chart';
 import PendapatanChart from '../../components/charts/pendapatan-chart';
@@ -9,6 +10,7 @@ import { apiService } from '../../services/api';
 type PeriodeType = 'harian' | 'bulanan';
 
 function HistoryScreen() {
+    const insets = useSafeAreaInsets();
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(false);
     const [userData, setUserData] = useState<any>(null);
@@ -381,7 +383,8 @@ function HistoryScreen() {
                 {/* Grafik Jenis Order */}
                 {!loading && memoizedJenisOrderChart}
 
-                <View style={{ height: 32 }} />
+                {/* Bottom Spacing for Tab Bar */}
+                <View style={{ height: Math.max(insets.bottom, 20) + 80 }} />
             </ScrollView>
         </View>
     );

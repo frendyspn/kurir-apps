@@ -8,9 +8,10 @@ interface DatePickerInputProps {
     value: Date;
     onChange: (date: Date) => void;
     placeholder?: string;
+    error?: string;
 }
 
-export default function DatePickerInput({ label, value, onChange, placeholder }: DatePickerInputProps) {
+export default function DatePickerInput({ label, value, onChange, placeholder, error }: DatePickerInputProps) {
     const [show, setShow] = useState(false);
 
     const formatDate = (date: Date) => {
@@ -33,7 +34,7 @@ export default function DatePickerInput({ label, value, onChange, placeholder }:
         <View style={styles.container}>
             <Text style={styles.label}>{label}</Text>
             <TouchableOpacity 
-                style={styles.input}
+                style={[styles.input, error && styles.inputError]}
                 onPress={() => setShow(true)}
             >
                 <Text style={[styles.inputText, !value && styles.placeholder]}>
@@ -41,6 +42,7 @@ export default function DatePickerInput({ label, value, onChange, placeholder }:
                 </Text>
                 <Ionicons name="calendar-outline" size={20} color="#6c757d" />
             </TouchableOpacity>
+            {error && <Text style={styles.errorText}>{error}</Text>}
 
             {show && (
                 <DateTimePicker
@@ -83,5 +85,14 @@ const styles = StyleSheet.create({
     },
     placeholder: {
         color: '#adb5bd',
+    },
+    inputError: {
+        borderColor: '#dc3545',
+        borderWidth: 1.5,
+    },
+    errorText: {
+        fontSize: 12,
+        color: '#dc3545',
+        marginTop: 4,
     },
 });
