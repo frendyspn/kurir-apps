@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "satu-kurir",
+    "name": "mitra-klikquick",
     "slug": "satu-kurir",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "satukurir",
+    "scheme": "mitra-klikquick",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.satukurir"
+      "package": "com.anonymous.mitraklikquick"
     },
     "web": {
       "output": "static",

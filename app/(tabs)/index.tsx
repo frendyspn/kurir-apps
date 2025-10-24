@@ -136,9 +136,9 @@ function HomeScreen() {
     // Menu items data
     const menuItems = [
         { id: 1, name: 'Transaksi\nManual', icon: 'create-outline' },
-        { id: 2, name: 'Riwayat', icon: 'time-outline' },
-        { id: 3, name: 'Pengaturan', icon: 'settings-outline' },
-        { id: 4, name: 'Bantuan', icon: 'help-circle-outline' },
+        // { id: 2, name: 'Riwayat', icon: 'time-outline' },
+        // { id: 3, name: 'Pengaturan', icon: 'settings-outline' },
+        // { id: 4, name: 'Bantuan', icon: 'help-circle-outline' },
     ];
 
     // Handle menu press

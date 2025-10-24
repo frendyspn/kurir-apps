@@ -52,7 +52,7 @@ export default function OtpScreen() {
                     {
                         text: 'OK',
                         onPress: () => {
-                            router.replace('/(tabs)');
+                            router.replace('../../index');
                         },
                     },
                 ]);

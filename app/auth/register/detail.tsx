@@ -25,8 +25,8 @@ export default function RegisterDetailScreen() {
         if (!userData?.jenis_kelamin) return '';
         const value = String(userData.jenis_kelamin).toUpperCase();
         // Normalize to 'L' or 'P'
-        if (value.startsWith('L') || value === 'LAKI-LAKI') return 'L';
-        if (value.startsWith('P') || value === 'PEREMPUAN') return 'P';
+        if (value.startsWith('L') || value === 'LAKI-LAKI') return 'Laki-laki';
+        if (value.startsWith('P') || value === 'PEREMPUAN') return 'Perempuan';
         return value;
     });
     const [tanggalLahir, setTanggalLahir] = useState<Date>(
@@ -51,8 +51,8 @@ export default function RegisterDetailScreen() {
 
     // Jenis Kelamin options
     const jenisKelaminOptions = [
-        { label: 'Laki-laki', value: 'L' },
-        { label: 'Perempuan', value: 'P' },
+        { label: 'Laki-laki', value: 'Laki-laki' },
+        { label: 'Perempuan', value: 'Perempuan' },
     ];
 
     useEffect(() => {
@@ -75,7 +75,6 @@ export default function RegisterDetailScreen() {
         setLoadingProvinsi(true);
         try {
             const response = await apiService.getProvinsi();
-            console.log('Provinsi API Response:', JSON.stringify(response, null, 2));
             
             // Check nested data structure
             const provinsiArray = response.data?.data || response.data;
@@ -111,7 +110,6 @@ export default function RegisterDetailScreen() {
         
         try {
             const response = await apiService.getKota(provinsiId);
-            console.log('Kota API Response:', JSON.stringify(response, null, 2));
             
             // Check nested data structure
             const kotaArray = response.data?.data || response.data;
@@ -144,7 +142,6 @@ export default function RegisterDetailScreen() {
         
         try {
             const response = await apiService.getKecamatan(kotaId);
-            console.log('Kecamatan API Response:', JSON.stringify(response, null, 2));
             
             // Check nested data structure
             const kecamatanArray = response.data?.data || response.data;

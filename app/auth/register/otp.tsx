@@ -114,9 +114,9 @@ export default function RegisterOtpScreen() {
                 otp: otpToVerify
             });
 
-            console.log('Registration Result:', result.data);
+            console.log('Registration Result:', result);
 
-            if (result.data.success) {
+            if (result.success) {
 
                 Alert.alert('Berhasil', 'Registrasi Berhasil, Silahkan Login', [
                     {
@@ -148,7 +148,7 @@ export default function RegisterOtpScreen() {
                 // Navigate to home
                 // router.replace('../login');
             } else {
-                setError(result.data.message || 'Kode OTP tidak valid');
+                setError(result.message || 'Kode OTP tidak valid');
             }
         } catch (err) {
             console.error('Verify OTP error:', err);
