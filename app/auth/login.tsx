@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Button from '../../components/button';
@@ -8,8 +8,9 @@ import { apiService } from '../../services/api';
 
 export default function LoginScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams();
     const [phoneNumber, setPhoneNumber] = useState('');
-    const [error, setError] = useState('');
+    const [error, setError] = useState(params.error ? String(params.error) : '');
     const [loading, setLoading] = useState(false);
 
     const validatePhoneNumber = (phone: string): boolean => {
@@ -70,7 +71,7 @@ export default function LoginScreen() {
             >
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="handled"
+                    keyboardShouldPersistTaps="never"
                 >
                     <View style={styles.content}>
                         <View style={styles.header}>

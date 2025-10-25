@@ -197,13 +197,13 @@ function HomeScreen() {
                 <Text style={styles.logo}>{APP_NAME}</Text>
 
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.profileButton}>
+                    <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
                         <View style={styles.profileImage}>
                             <Ionicons name="person" size={24} color="#ffffff" />
                         </View>
-                        <View style={styles.profileBadge}>
+                        {/* <View style={styles.profileBadge}>
                             <Text style={styles.profileBadgeText}>6</Text>
-                        </View>
+                        </View> */}
                     </TouchableOpacity>
                 </View>
             </View>

@@ -33,6 +33,10 @@ export default function KelengkapanDataScreen() {
     const [platNomor, setPlatNomor] = useState('');
     const [fotoSim, setFotoSim] = useState<string | null>(null);
     const [fotoSimUrl, setFotoSimUrl] = useState<string | null>(null); // URL dari server untuk existing image
+    const [fotoStnk, setFotoStnk] = useState<string | null>(null);
+    const [fotoStnkUrl, setFotoStnkUrl] = useState<string | null>(null); // URL dari server untuk existing image
+    const [fotoDiri, setFotoDiri] = useState<string | null>(null);
+    const [fotoDiriUrl, setFotoDiriUrl] = useState<string | null>(null); // URL dari server untuk existing image
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [errors, setErrors] = useState<{
@@ -40,6 +44,8 @@ export default function KelengkapanDataScreen() {
         merek?: string;
         platNomor?: string;
         fotoSim?: string;
+        fotoStnk?: string;
+        fotoDiri?: string;
     }>({});
 
     const typeKendaraanOptions = [
@@ -66,6 +72,18 @@ export default function KelengkapanDataScreen() {
                 setFotoSimUrl(initialData.lampiran);
                 // Set fotoSim juga untuk validasi
                 setFotoSim(initialData.lampiran);
+            }
+            if (initialData.lampiran_stnk) {
+                // Set foto STNK dari server (URL)
+                setFotoStnkUrl(initialData.lampiran_stnk);
+                // Set fotoStnk juga untuk validasi
+                setFotoStnk(initialData.lampiran_stnk);
+            }
+            if (initialData.foto_diri) {
+                // Set foto Diri dari server (URL)
+                setFotoDiriUrl(initialData.foto_diri);
+                // Set fotoDiri juga untuk validasi
+                setFotoDiri(initialData.foto_diri);
             }
         }
     }, []);
@@ -159,6 +177,156 @@ export default function KelengkapanDataScreen() {
         );
     };
 
+    // --- Foto STNK handlers ---
+    const pickImageFotoStnk = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Izinkan akses ke galeri untuk mengupload foto STNK');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                const uri = result.assets[0].uri;
+                setFotoStnk(uri);
+                setFotoStnkUrl(null);
+                setErrors({ ...errors, fotoStnk: '' });
+            }
+        } catch (error) {
+            console.error('Error picking STNK image:', error);
+            Alert.alert('Error', 'Gagal memilih gambar STNK');
+        }
+    };
+
+    const takePhotoFotoStnk = async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Izinkan akses kamera untuk mengambil foto STNK');
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                const uri = result.assets[0].uri;
+                setFotoStnk(uri);
+                setFotoStnkUrl(null);
+                setErrors({ ...errors, fotoStnk: '' });
+            }
+        } catch (error) {
+            console.error('Error taking STNK photo:', error);
+            Alert.alert('Error', 'Gagal mengambil foto STNK');
+        }
+    };
+
+    const showImageFotoStnkPickerOptions = () => {
+        Alert.alert(
+            'Upload Foto STNK',
+            'Pilih metode upload foto',
+            [
+                {
+                    text: 'Ambil Foto',
+                    onPress: takePhotoFotoStnk
+                },
+                {
+                    text: 'Pilih dari Galeri',
+                    onPress: pickImageFotoStnk
+                },
+                {
+                    text: 'Batal',
+                    style: 'cancel'
+                }
+            ]
+        );
+    };
+
+    // --- Foto Diri handlers ---
+    const pickImageFotoDiri = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Izinkan akses ke galeri untuk mengupload foto diri');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                const uri = result.assets[0].uri;
+                setFotoDiri(uri);
+                setFotoDiriUrl(null);
+                setErrors({ ...errors, fotoDiri: '' });
+            }
+        } catch (error) {
+            console.error('Error picking foto diri image:', error);
+            Alert.alert('Error', 'Gagal memilih gambar foto diri');
+        }
+    };
+
+    const takePhotoFotoDiri = async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Izinkan akses kamera untuk mengambil foto diri');
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                const uri = result.assets[0].uri;
+                setFotoDiri(uri);
+                setFotoDiriUrl(null);
+                setErrors({ ...errors, fotoDiri: '' });
+            }
+        } catch (error) {
+            console.error('Error taking foto diri photo:', error);
+            Alert.alert('Error', 'Gagal mengambil foto diri');
+        }
+    };
+
+    const showImageFotoDiriPickerOptions = () => {
+        Alert.alert(
+            'Upload Foto Diri',
+            'Pilih metode upload foto',
+            [
+                {
+                    text: 'Ambil Foto',
+                    onPress: takePhotoFotoDiri
+                },
+                {
+                    text: 'Pilih dari Galeri',
+                    onPress: pickImageFotoDiri
+                },
+                {
+                    text: 'Batal',
+                    style: 'cancel'
+                }
+            ]
+        );
+    };
+
     const validateForm = () => {
         const newErrors: typeof errors = {};
 
@@ -178,6 +346,14 @@ export default function KelengkapanDataScreen() {
             newErrors.fotoSim = 'Foto SIM harus diupload';
         }
 
+        if (!fotoStnk) {
+            newErrors.fotoStnk = 'Foto STNK harus diupload';
+        }
+
+        if (!fotoDiri) {
+            newErrors.fotoDiri = 'Foto diri harus diupload';
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -191,15 +367,19 @@ export default function KelengkapanDataScreen() {
 
         try {
             // Call API to update kelengkapan data
-            const result = await apiService.updateKelengkapanData({
+            const payload: any = {
                 no_hp: phoneNumber,
                 type_kendaraan: typeKendaraan,
                 merek: merek,
                 plat_nomor: platNomor,
                 foto_sim_uri: fotoSim || '', // Kirim URI file, bukan base64
-            });
+                foto_stnk_uri: fotoStnk || '',
+                foto_diri_uri: fotoDiri || '',
+            };
 
-            
+            const result = await apiService.updateKelengkapanData(payload);
+
+            console.log('Update kelengkapan data result:', result);
             if (result.success) {
                 Alert.alert(
                     'Berhasil',
@@ -258,7 +438,7 @@ export default function KelengkapanDataScreen() {
             <ScrollView 
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="never"
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -272,9 +452,7 @@ export default function KelengkapanDataScreen() {
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚠️</Text>
                         <Text style={styles.warningText}>
-                            Akun kurir Anda belum aktif.{'\n'}
-                            Mohon lengkapi data berikut untuk aktivasi akun.{'\n'}
-                            Atau refresh halaman ini.
+                            Data berhasil diinput, silahkan tunggu verifikasi admin
                         </Text>
                     </View>
                 </View>
@@ -354,6 +532,87 @@ export default function KelengkapanDataScreen() {
                             <Text style={styles.errorText}>{errors.fotoSim}</Text>
                         )}
                     </View>
+
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Foto STNK</Text>
+                        
+                        {(fotoStnk || fotoStnkUrl) ? (
+                            <View style={styles.imagePreviewContainer}>
+                                <Image 
+                                    source={{ 
+                                        uri: fotoStnk || fotoStnkUrl || ''
+                                    }} 
+                                    style={styles.imagePreview}
+                                    resizeMode="cover"
+                                />
+                                <TouchableOpacity 
+                                    style={styles.changeImageButton}
+                                    onPress={showImageFotoStnkPickerOptions}
+                                >
+                                    <Text style={styles.changeImageText}>Ubah Foto</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <TouchableOpacity 
+                                style={[
+                                    styles.uploadButton,
+                                    errors.fotoStnk && styles.uploadButtonError
+                                ]}
+                                onPress={showImageFotoStnkPickerOptions}
+                            >
+                                <Text style={styles.uploadIcon}>📷</Text>
+                                <Text style={styles.uploadText}>Upload Foto STNK</Text>
+                                <Text style={styles.uploadSubtext}>
+                                    Klik untuk mengambil foto atau pilih dari galeriii
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {errors.fotoStnk && (
+                            <Text style={styles.errorText}>{errors.fotoStnk}</Text>
+                        )}
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Foto Diri</Text>
+
+                        {(fotoDiri || fotoDiriUrl) ? (
+                            <View style={styles.imagePreviewContainer}>
+                                <Image 
+                                    source={{ 
+                                        uri: fotoDiri || fotoDiriUrl || ''
+                                    }} 
+                                    style={styles.imagePreview}
+                                    resizeMode="cover"
+                                />
+                                <TouchableOpacity 
+                                    style={styles.changeImageButton}
+                                    onPress={showImageFotoDiriPickerOptions}
+                                >
+                                    <Text style={styles.changeImageText}>Ubah Foto</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <TouchableOpacity 
+                                style={[
+                                    styles.uploadButton,
+                                    errors.fotoDiri && styles.uploadButtonError
+                                ]}
+                                onPress={showImageFotoDiriPickerOptions}
+                            >
+                                <Text style={styles.uploadIcon}>📷</Text>
+                                <Text style={styles.uploadText}>Upload Foto Diri</Text>
+                                <Text style={styles.uploadSubtext}>
+                                    Klik untuk mengambil foto atau pilih dari galeriii
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {errors.fotoDiri && (
+                            <Text style={styles.errorText}>{errors.fotoDiri}</Text>
+                        )}
+                    </View>
+
                 </View>
 
                 <View style={styles.footer}>

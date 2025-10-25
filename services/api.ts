@@ -42,7 +42,7 @@ class ApiService {
                         data: data,
                         message: data.Message || 'Success',
                     };
-                } else if (response.status === 400 || response.status === 401) {
+                } else if (response.status === 400 || response.status === 401 || response.status === 429) {
                     console.log('masuk 400')
                     return {
                         success: false,
@@ -374,6 +374,8 @@ class ApiService {
         merek: string;
         plat_nomor: string;
         foto_sim_uri: string; // File URI from device
+        foto_stnk_uri: string; // File URI from device
+        foto_diri_uri: string; // File URI from device
     }): Promise<ApiResponse> {
         const formData = new FormData();
 
@@ -391,6 +393,26 @@ class ApiService {
             name: `sim_${data.no_hp}_${Date.now()}.${fileType}`,
             type: `image/${fileType}`,
         } as any);
+
+        const uriPartsStnk = data.foto_stnk_uri.split('.');
+        const fileTypeStnk = uriPartsStnk[uriPartsStnk.length - 1];
+        
+        formData.append('foto_stnk', {
+            uri: data.foto_stnk_uri,
+            name: `stnk_${data.no_hp}_${Date.now()}.${fileTypeStnk}`,
+            type: `image/${fileTypeStnk}`,
+        } as any);
+
+        const uriPartsDiri = data.foto_diri_uri.split('.');
+        const fileTypeDiri = uriPartsDiri[uriPartsDiri.length - 1];
+        
+        formData.append('foto_diri', {
+            uri: data.foto_diri_uri,
+            name: `diri_${data.no_hp}_${Date.now()}.${fileTypeDiri}`,
+            type: `image/${fileTypeDiri}`,
+        } as any);
+
+        console.log(JSON.stringify(formData))
 
         return this.request(API_ENDPOINTS.UPDATE_KELENGKAPAN_DATA, {
             method: 'POST',

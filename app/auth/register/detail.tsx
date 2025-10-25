@@ -336,7 +336,7 @@ export default function RegisterDetailScreen() {
                 <ScrollView
                     style={styles.content}
                     contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="handled"
+                    keyboardShouldPersistTaps="never"
                 >
                     <View style={styles.formSection}>
                         <Text style={styles.sectionTitle}>Lengkapi Data Diri Anda</Text>
@@ -433,6 +433,7 @@ export default function RegisterDetailScreen() {
                                     <Text style={styles.loadingFieldText}>Memuat provinsi...</Text>
                                 </View>
                             ) : (
+                                
                                 <DropdownInput
                                     label="Provinsi"
                                     value={provinsi}
@@ -450,6 +451,7 @@ export default function RegisterDetailScreen() {
                                     <Text style={styles.loadingFieldText}>Memuat kota...</Text>
                                 </View>
                             ) : (
+                                
                                 <DropdownInput
                                     label="Kota/Kabupaten"
                                     value={kota}
@@ -468,6 +470,7 @@ export default function RegisterDetailScreen() {
                                     <Text style={styles.loadingFieldText}>Memuat kecamatan...</Text>
                                 </View>
                             ) : (
+                                
                                 <DropdownInput
                                     label="Kecamatan"
                                     value={kecamatan}

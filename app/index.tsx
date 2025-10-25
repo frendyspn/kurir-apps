@@ -20,7 +20,7 @@ export default function Index() {
 
             const result = await apiService.cekStatusSopir(user ? JSON.parse(user).no_hp : '');
             console.log('Cek status sopir result:', result);
-            if (result.data.success) {
+            if (result.data?.success) {
 
                 if (result.data?.data?.aktif === 'N') {
                     console.log('Sopir tidak aktif, redirect ke kelengkapan data');
@@ -35,6 +35,8 @@ export default function Index() {
                         }
                     });
                     return;
+                } else {
+                    setIsLoggedIn(!!token);
                 }
             } else {
                 await AsyncStorage.removeItem('userData');
@@ -42,13 +44,18 @@ export default function Index() {
 
                 console.log('User logged out successfully');
 
-                // Redirect ke login screen
-                router.replace('/auth/login');
+                // Redirect ke login screen dengan error message
+                router.replace({
+                    pathname: '/auth/login',
+                    params: {
+                        error: result.data?.message || 'Session expired, silakan login ulang.'
+                    }
+                });
             }
 
             // console.log('User token:', token);
             // console.log('User data:', user);
-            setIsLoggedIn(!!token);
+            
             // setIsLoggedIn(false);
         } catch (error) {
             console.error('Error checking login status:', error);

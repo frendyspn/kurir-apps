@@ -3,15 +3,17 @@ import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native'
 interface InputProps extends TextInputProps {
     label?: string;
     error?: string;
+    editable?: boolean;
 }
 
-export default function Input({ label, error, style, ...props }: InputProps) {
+export default function Input({ label, error, editable = true, style, ...props }: InputProps) {
     return (
         <View style={styles.container}>
             {label && <Text style={styles.label}>{label}</Text>}
             <TextInput
-                style={[styles.input, error && styles.inputError, style]}
+                style={[styles.input, error && styles.inputError, !editable && styles.inputDisabled, style]}
                 placeholderTextColor="#999"
+                editable={editable}
                 {...props}
             />
             {error && <Text style={styles.errorText}>{error}</Text>}
@@ -40,6 +42,9 @@ const styles = StyleSheet.create({
     },
     inputError: {
         borderColor: '#dc3545',
+    },
+    inputDisabled: {
+        backgroundColor: '#f8f9fa',
     },
     errorText: {
         color: '#dc3545',

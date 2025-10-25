@@ -1,4 +1,5 @@
 import { apiService } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -116,13 +117,16 @@ export default function RegisterOtpScreen() {
 
             console.log('Registration Result:', result);
 
-            if (result.success) {
+            if (result.data?.success) {
 
-                Alert.alert('Berhasil', 'Registrasi Berhasil, Silahkan Login', [
+                await AsyncStorage.setItem('userToken', result.data?.data?.token);
+                await AsyncStorage.setItem('userData', JSON.stringify(result.data?.data?.user_login));
+                
+                Alert.alert('Berhasil', 'Registrasi Berhasil, Silahkan Lengkapi Data Pendukung', [
                     {
                         text: 'OK',
                         onPress: () => {
-                            router.replace('../login');
+                            router.replace('/auth/register/kelengkapan-data');
                         },
                     },
                 ]);
@@ -148,7 +152,7 @@ export default function RegisterOtpScreen() {
                 // Navigate to home
                 // router.replace('../login');
             } else {
-                setError(result.message || 'Kode OTP tidak valid');
+                setError(result.data?.message || 'Kode OTP tidak valid');
             }
         } catch (err) {
             console.error('Verify OTP error:', err);
