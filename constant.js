@@ -37,4 +37,5 @@ export const API_ENDPOINTS = {
     VERIFY_OTP_REGISTER: `${API_BASE_URL}/kurir/register/verify-otp`,
     CEK_STATUS_SOPIR: `${API_BASE_URL}/kurir/register/cek-status-sopir`,
     UPDATE_KELENGKAPAN_DATA: `${API_BASE_URL}/kurir/register/update-kelengkapan-data`,
+    UPDATE_KONSUMEN: `${API_BASE_URL}/kurir/v1/update-konsumen`,
 };

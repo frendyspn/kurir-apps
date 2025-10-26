@@ -134,8 +134,8 @@ function HomeScreen() {
     }, []);
 
     // Menu items data
-    const menuItems = [
-        { id: 1, name: 'Transaksi\nManual', icon: 'create-outline' },
+    const menuItems: any[] = [
+        // { id: 1, name: 'Transaksi\nManual', icon: 'create-outline' },
         // { id: 2, name: 'Riwayat', icon: 'time-outline' },
         // { id: 3, name: 'Pengaturan', icon: 'settings-outline' },
         // { id: 4, name: 'Bantuan', icon: 'help-circle-outline' },
@@ -197,7 +197,7 @@ function HomeScreen() {
                 <Text style={styles.logo}>{APP_NAME}</Text>
 
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
+                    <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/akun')}>
                         <View style={styles.profileImage}>
                             <Ionicons name="person" size={24} color="#ffffff" />
                         </View>

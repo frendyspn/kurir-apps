@@ -12,6 +12,10 @@ class ApiService {
         options: RequestInit = {}
     ): Promise<ApiResponse<T>> {
         try {
+            // Create AbortController for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
             const response = await fetch(url, {
                 ...options,
                 headers: {
@@ -19,12 +23,16 @@ class ApiService {
                     'X-Authorization': `Bearer ${API_TOKEN}`,
                     ...options.headers,
                 },
+                signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
 
             console.log('=== API REQUEST ===');
             console.log('URL:', url);
             console.log('Method:', options.method || 'GET');
             console.log('Status:', response.status);
+            console.log('Status Text:', response.statusText);
             console.log('Content-Type:', response.headers.get('content-type'));
 
             const responseText = await response.text();
@@ -53,21 +61,36 @@ class ApiService {
                     console.log('masuk ELSE')
                     return {
                         success: false,
-                        message: data.Message || data.message || 'Request failed',
+                        message: data.Message || data.message || `HTTP ${response.status}: ${response.statusText}`,
                     };
                 }
             } else {
                 console.error('Server returned non-JSON response');
                 return {
                     success: false,
-                    message: 'Server error, silakan coba lagi nanti',
+                    message: `Server error (${response.status}): ${responseText.substring(0, 100)}`,
                 };
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('API Error:', error);
+            
+            if (error.name === 'AbortError') {
+                return {
+                    success: false,
+                    message: 'Request timeout. Server tidak merespons dalam 30 detik.',
+                };
+            }
+            
+            if (error.message?.includes('Network request failed')) {
+                return {
+                    success: false,
+                    message: 'Koneksi jaringan gagal. Periksa koneksi internet Anda.',
+                };
+            }
+            
             return {
                 success: false,
-                message: 'Terjadi kesalahan jaringan, silakan coba lagi',
+                message: `Terjadi kesalahan: ${error.message || 'Unknown error'}`,
             };
         }
     }
@@ -205,6 +228,40 @@ class ApiService {
         formData.append('no_hp', phoneNumber);
 
         return this.request(API_ENDPOINTS.CEK_NO_HP_REGISTRATION, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    
+    async updateKonsumen(data: {
+        id_konsumen: string;
+        no_hp: string;
+        nama_lengkap: string;
+        email: string;
+        jenis_kelamin: string;
+        tanggal_lahir: string;
+        tempat_lahir: string;
+        provinsi_id: string;
+        kota_id: string;
+        kecamatan_id: string;
+        alamat: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('id_konsumen', data.id_konsumen);
+        formData.append('no_hp', data.no_hp);
+        formData.append('nama_lengkap', data.nama_lengkap);
+        formData.append('email', data.email);
+        formData.append('jenis_kelamin', data.jenis_kelamin);
+        formData.append('tanggal_lahir', data.tanggal_lahir);
+        formData.append('tempat_lahir', data.tempat_lahir);
+        formData.append('provinsi_id', data.provinsi_id);
+        formData.append('kota_id', data.kota_id);
+        formData.append('kecamatan_id', data.kecamatan_id);
+        formData.append('alamat', data.alamat);
+
+        return this.request(API_ENDPOINTS.UPDATE_KONSUMEN, {
             method: 'POST',
             body: formData,
         });
@@ -373,46 +430,60 @@ class ApiService {
         type_kendaraan: string;
         merek: string;
         plat_nomor: string;
-        foto_sim_uri: string; // File URI from device
-        foto_stnk_uri: string; // File URI from device
-        foto_diri_uri: string; // File URI from device
+        foto_sim_uri?: string; // File URI from device (optional)
+        foto_stnk_uri?: string; // File URI from device (optional)
+        foto_diri_uri?: string; // File URI from device (optional)
     }): Promise<ApiResponse> {
         const formData = new FormData();
 
         formData.append('no_hp', data.no_hp);
+        
+        // Map type_kendaraan string to id_jenis_kendaraan integer
+        const idJenisKendaraan = data.type_kendaraan === 'Motor' ? 1 : data.type_kendaraan === 'Mobil' ? 2 : 1;
+        formData.append('id_jenis_kendaraan', idJenisKendaraan.toString());
         formData.append('type_kendaraan', data.type_kendaraan);
         formData.append('merek', data.merek);
         formData.append('plat_nomor', data.plat_nomor);
 
-        // Upload file sebagai multipart/form-data
-        const uriParts = data.foto_sim_uri.split('.');
-        const fileType = uriParts[uriParts.length - 1];
-        
-        formData.append('foto_sim', {
-            uri: data.foto_sim_uri,
-            name: `sim_${data.no_hp}_${Date.now()}.${fileType}`,
-            type: `image/${fileType}`,
-        } as any);
+        // Upload file sebagai multipart/form-data hanya jika URI ada
+        if (data.foto_sim_uri && data.foto_sim_uri.trim() !== '') {
+            const uriParts = data.foto_sim_uri.split('.');
+            const fileType = uriParts[uriParts.length - 1];
+            
+            formData.append('foto_sim', {
+                uri: data.foto_sim_uri,
+                name: `sim_${data.no_hp}_${Date.now()}.${fileType}`,
+                type: `image/${fileType}`,
+            } as any);
+        }
 
-        const uriPartsStnk = data.foto_stnk_uri.split('.');
-        const fileTypeStnk = uriPartsStnk[uriPartsStnk.length - 1];
-        
-        formData.append('foto_stnk', {
-            uri: data.foto_stnk_uri,
-            name: `stnk_${data.no_hp}_${Date.now()}.${fileTypeStnk}`,
-            type: `image/${fileTypeStnk}`,
-        } as any);
+        if (data.foto_stnk_uri && data.foto_stnk_uri.trim() !== '') {
+            const uriPartsStnk = data.foto_stnk_uri.split('.');
+            const fileTypeStnk = uriPartsStnk[uriPartsStnk.length - 1];
+            
+            formData.append('foto_stnk', {
+                uri: data.foto_stnk_uri,
+                name: `stnk_${data.no_hp}_${Date.now()}.${fileTypeStnk}`,
+                type: `image/${fileTypeStnk}`,
+            } as any);
+        }
 
-        const uriPartsDiri = data.foto_diri_uri.split('.');
-        const fileTypeDiri = uriPartsDiri[uriPartsDiri.length - 1];
-        
-        formData.append('foto_diri', {
-            uri: data.foto_diri_uri,
-            name: `diri_${data.no_hp}_${Date.now()}.${fileTypeDiri}`,
-            type: `image/${fileTypeDiri}`,
-        } as any);
+        if (data.foto_diri_uri && data.foto_diri_uri.trim() !== '') {
+            const uriPartsDiri = data.foto_diri_uri.split('.');
+            const fileTypeDiri = uriPartsDiri[uriPartsDiri.length - 1];
+            
+            formData.append('foto_diri', {
+                uri: data.foto_diri_uri,
+                name: `diri_${data.no_hp}_${Date.now()}.${fileTypeDiri}`,
+                type: `image/${fileTypeDiri}`,
+            } as any);
+        }
 
-        console.log(JSON.stringify(formData))
+        console.log('FormData contents:');
+        // Log FormData contents (this is tricky with FormData, but we can try)
+        for (let pair of (formData as any)._parts) {
+            console.log(pair[0] + ': ' + (typeof pair[1] === 'object' ? 'File object' : pair[1]));
+        }
 
         return this.request(API_ENDPOINTS.UPDATE_KELENGKAPAN_DATA, {
             method: 'POST',

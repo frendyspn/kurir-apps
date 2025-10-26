@@ -78,7 +78,7 @@ export default function LogoutScreen() {
 
                     <TouchableOpacity
                         style={styles.cancelButton}
-                        onPress={() => router.push('/profile')}
+                        onPress={() => router.push('/')}
                         disabled={isLoggingOut}
                     >
                         <Text style={styles.cancelButtonText}>Batal</Text>
