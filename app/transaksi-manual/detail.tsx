@@ -1,7 +1,19 @@
 import { Stack } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { BackHandler, StyleSheet, Text, View } from 'react-native';
 
 export default function TransaksiDetailScreen() {
+    useEffect(() => {
+        const backAction = () => {
+            // Handle back action - could navigate back or show confirmation
+            return true; // Prevent default behavior
+        };
+
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+        return () => backHandler.remove();
+    }, []);
+
     return (
         <>
             <Stack.Screen

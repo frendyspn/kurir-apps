@@ -45,10 +45,29 @@ export default function TabLayout() {
                     }}
                 />
                 <Tabs.Screen
+                    name="transaksi"
+                    options={{
+                        title: 'Transaksi',
+                        tabBarIcon: ({ color }) => <Ionicons name="create" size={24} color={color} />,
+                    }}
+                />
+                <Tabs.Screen
                     name="history"
                     options={{
                         title: 'History',
                         tabBarIcon: ({ color }) => <Ionicons name="time" size={24} color={color} />,
+                    }}
+                />
+                <Tabs.Screen
+                    name="kontak"
+                    options={{
+                        title: 'Kontak',
+                        tabBarIcon: ({ color }) => <Ionicons name="call" size={24} color={color} />,
+                        headerShown: false,
+                        header: undefined,
+                        headerTitle: '',
+                        headerLeft: undefined,
+                        headerRight: undefined,
                     }}
                 />
 

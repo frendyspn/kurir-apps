@@ -491,6 +491,66 @@ class ApiService {
         });
     }
 
+    async updateProfileFoto(data: {
+        no_hp: string;
+        foto_diri_uri?: string; // File URI from device (optional)
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('no_hp', data.no_hp);
+        
+        if (data.foto_diri_uri && data.foto_diri_uri.trim() !== '') {
+            const uriPartsDiri = data.foto_diri_uri.split('.');
+            const fileTypeDiri = uriPartsDiri[uriPartsDiri.length - 1];
+            
+            formData.append('foto_diri', {
+                uri: data.foto_diri_uri,
+                name: `diri_${data.no_hp}_${Date.now()}.${fileTypeDiri}`,
+                type: `image/${fileTypeDiri}`,
+            } as any);
+        }
+
+        for (let pair of (formData as any)._parts) {
+            console.log(pair[0] + ': ' + (typeof pair[1] === 'object' ? 'File object' : pair[1]));
+        }
+
+        return this.request(API_ENDPOINTS.UPDATE_PROFILE_FOTO, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+
+    // Get Konsumen
+    async getKonsumen(idKonsumen: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('id_konsumen', idKonsumen);
+
+        return this.request(API_ENDPOINTS.GET_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    async addKonsumen(data: {
+        id_konsumen: string;
+        nama_lengkap: string;
+        no_hp: string;
+        alamat_lengkap: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('referral_id', data.id_konsumen);
+        formData.append('nama_lengkap', data.nama_lengkap);
+        formData.append('no_hp', data.no_hp);
+        formData.append('alamat_lengkap', data.alamat_lengkap);
+
+        return this.request(API_ENDPOINTS.ADD_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
 }
 
 export const apiService = new ApiService();

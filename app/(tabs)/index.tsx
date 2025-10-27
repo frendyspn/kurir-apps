@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { BackHandler, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackHandler, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
 import OrderChart from '../../components/charts/order-chart';
@@ -199,7 +199,15 @@ function HomeScreen() {
                 <View style={styles.headerRight}>
                     <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/akun')}>
                         <View style={styles.profileImage}>
-                            <Ionicons name="person" size={24} color="#ffffff" />
+                            {userData?.foto ? (
+                                <Image 
+                                    source={{ uri: userData.foto }} 
+                                    style={styles.profileImageContent}
+                                    resizeMode="cover"
+                                />
+                            ) : (
+                                <Ionicons name="person" size={24} color="#ffffff" />
+                            )}
                         </View>
                         {/* <View style={styles.profileBadge}>
                             <Text style={styles.profileBadgeText}>6</Text>
@@ -332,6 +340,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#6c757d',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    profileImageContent: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
     },
     profileBadge: {
         position: 'absolute',

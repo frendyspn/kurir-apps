@@ -21,7 +21,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           <Stack.Screen name="transaksi-manual" options={{ headerShown: false }} />
-                    <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+          <Stack.Screen name="kontak" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
           <Stack.Screen name="auth/logout" options={{ headerShown: false }} />
           <Stack.Screen name="auth/otp" options={{ headerShown: false }} />
           <Stack.Screen name="auth/register" options={{ headerShown: false }} />

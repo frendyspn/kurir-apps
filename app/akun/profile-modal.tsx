@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { apiService } from '../../services/api';
 import EditProfileModal from './edit-profile-modal';
 import EditProfilePhotoModal from './edit-profile-photo-modal';
@@ -72,6 +72,35 @@ export default function ProfileModal({ visible, onClose, onSave }: { visible: bo
                                 <Ionicons name="close" size={24} color="#0d6efd" />
                             </TouchableOpacity>
                         </View>
+
+                        {/* Profile Photo Section */}
+                        <View style={styles.photoContainer}>
+                            {userData?.foto ? (
+                                <Image
+                                    source={{ uri: userData.foto }}
+                                    style={styles.profileImage}
+                                />
+                            ) : (
+                                <View style={styles.photoPlaceholder}>
+                                    <Ionicons name="person" size={48} color="#6c757d" />
+                                </View>
+                            )}
+                        </View>
+                        {/* Photo Upload Section */}
+                        <View style={styles.photoSection}>
+                            <TouchableOpacity
+                                style={styles.photoUploadButton}
+                                onPress={() => {
+                                    console.log('Opening photo modal with userData:', userData);
+                                    onClose();
+                                    setTimeout(() => setShowPhotoModal(true), 300);
+                                }}
+                            >
+                                <Ionicons name="camera" size={20} color="#0d6efd" />
+                                <Text style={styles.photoUploadText}>Update Foto Profile</Text>
+                            </TouchableOpacity>
+                        </View>
+
                         <View style={styles.profileInfo}>
                             <Text style={styles.label}>Nama Lengkap</Text>
                             <Text style={styles.value}>{userData?.nama_lengkap || '-'}</Text>
@@ -87,20 +116,7 @@ export default function ProfileModal({ visible, onClose, onSave }: { visible: bo
                             <Text style={styles.value}>{userData?.tanggal_lahir || '-'}</Text>
                         </View>
 
-                        {/* Photo Upload Section */}
-                        {/* <View style={styles.photoSection}>
-                            <TouchableOpacity
-                                style={styles.photoUploadButton}
-                                onPress={() => {
-                                    console.log('Opening photo modal with userData:', userData);
-                                    onClose();
-                                    setTimeout(() => setShowPhotoModal(true), 300);
-                                }}
-                            >
-                                <Ionicons name="camera" size={20} color="#0d6efd" />
-                                <Text style={styles.photoUploadText}>Update Foto Profile</Text>
-                            </TouchableOpacity>
-                        </View> */}
+                        
 
                         <TouchableOpacity style={styles.editButton} onPress={() => { onClose(); setTimeout(() => setShowEditModal(true), 300); }}>
                             <Text style={styles.editButtonText}>Edit</Text>
@@ -199,5 +215,25 @@ const styles = StyleSheet.create({
         color: '#0d6efd',
         fontSize: 14,
         fontWeight: 'bold',
+    },
+    photoContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    profileImage: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#f8f9fa',
+    },
+    photoPlaceholder: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#f8f9fa',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#dee2e6',
     },
 });

@@ -4,13 +4,14 @@ import PelangganSearchInput from '@/components/pelanggan-search-input';
 import { apiService } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, BackHandler, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TambahTransaksiScreen() {
     const insets = useSafeAreaInsets();
+    const { selectedCustomer } = useLocalSearchParams<{ selectedCustomer?: string }>();
     const [loading, setLoading] = useState(false);
     const [tanggal, setTanggal] = useState<Date>(new Date());
     const [agenKurir, setAgenKurir] = useState<string>('');
@@ -36,6 +37,29 @@ export default function TambahTransaksiScreen() {
     useEffect(() => {
         fetchAgen();
         fetchLayanan();
+        
+        // Handle selected customer from params
+        if (selectedCustomer) {
+            try {
+                const customerData = JSON.parse(selectedCustomer);
+                setPelanggan(customerData.id_konsumen);
+                setPelangganLabel(`${customerData.nama_lengkap} (${customerData.no_hp})`);
+                setPelangganData(customerData);
+            } catch (error) {
+                console.error('Error parsing selected customer:', error);
+            }
+        }
+    }, [selectedCustomer]);
+
+    useEffect(() => {
+        const backAction = () => {
+            router.back();
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+        return () => backHandler.remove();
     }, []);
 
     const fetchAgen = async () => {
@@ -167,7 +191,7 @@ export default function TambahTransaksiScreen() {
 
     const handleSubmit = async () => {
         // Validation
-        if (!tanggal || !agenKurir || !pelanggan || !layanan || !alamatJemput || !alamatAntar || !biayaAntar) {
+        if (!tanggal || !agenKurir || (!selectedCustomer && !pelanggan) || !layanan || !alamatJemput || !alamatAntar || !biayaAntar) {
             alert('Mohon lengkapi semua field yang wajib diisi');
             return;
         }
@@ -279,18 +303,31 @@ export default function TambahTransaksiScreen() {
                     )}
 
                     {/* Pelanggan */}
-                    <PelangganSearchInput
-                        label="Pelanggan"
-                        value={pelanggan}
-                        onChange={handlePelangganChange}
-                        onSearch={handleSearchPelanggan}
-                        onClearResults={handleClearPelangganResults}
-                        options={pelangganOptions}
-                        placeholder="Cari pelanggan"
-                        searchPlaceholder="Masukkan no HP atau nama"
-                        selectedLabel={pelangganLabel}
-                        isSearching={loadingPelanggan}
-                    />
+                    {selectedCustomer ? (
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.inputLabel}>Pelanggan</Text>
+                            <View style={styles.selectedCustomerContainer}>
+                                <Ionicons name="person" size={20} color="#0d6efd" />
+                                <View style={styles.selectedCustomerInfo}>
+                                    <Text style={styles.selectedCustomerName}>{pelangganLabel}</Text>
+                                    <Text style={styles.selectedCustomerNote}>Pelanggan sudah dipilih</Text>
+                                </View>
+                            </View>
+                        </View>
+                    ) : (
+                        <PelangganSearchInput
+                            label="Pelanggan"
+                            value={pelanggan}
+                            onChange={handlePelangganChange}
+                            onSearch={handleSearchPelanggan}
+                            onClearResults={handleClearPelangganResults}
+                            options={pelangganOptions}
+                            placeholder="Cari pelanggan"
+                            searchPlaceholder="Masukkan no HP atau nama"
+                            selectedLabel={pelangganLabel}
+                            isSearching={loadingPelanggan}
+                        />
+                    )}
 
                     {/* Layanan */}
                     <View style={styles.inputContainer}>
@@ -600,5 +637,29 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         color: '#ffffff',
+    },
+    selectedCustomerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#e7f3ff',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#0d6efd',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        gap: 12,
+    },
+    selectedCustomerInfo: {
+        flex: 1,
+    },
+    selectedCustomerName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#212529',
+    },
+    selectedCustomerNote: {
+        fontSize: 12,
+        color: '#0d6efd',
+        fontWeight: '500',
     },
 });

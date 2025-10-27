@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Memoized Transaksi Item Component
@@ -88,6 +88,17 @@ const DetailModal = memo(({ transaksi, onClose, onRefresh }: { transaksi: any; o
             }
         };
         getUserData();
+    }, []);
+
+    useEffect(() => {
+        const backAction = () => {
+            router.back();
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+        return () => backHandler.remove();
     }, []);
 
     const formatCurrency = (amount: string | number): string => {

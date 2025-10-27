@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import DatePickerInput from '../../components/date-picker-input';
 import DropdownInput from '../../components/dropdown-input';
 import Input from '../../components/input';
 import { apiService } from '../../services/api';
@@ -13,6 +14,7 @@ export default function EditProfileModal({ visible, onClose, userData, onSave }:
     onSave: (data: any) => void;
 }) {
     const [form, setForm] = useState<any>({});
+    const [tanggalLahir, setTanggalLahir] = useState<Date | null>(null);
     const [provinsiOptions, setProvinsiOptions] = useState<any[]>([]);
     const [kotaOptions, setKotaOptions] = useState<any[]>([]);
     const [kecamatanOptions, setKecamatanOptions] = useState<any[]>([]);
@@ -27,6 +29,18 @@ export default function EditProfileModal({ visible, onClose, userData, onSave }:
                 kota_id: userData.kota_id ? String(userData.kota_id) : '',
                 kecamatan_id: userData.kecamatan_id ? String(userData.kecamatan_id) : '',
             });
+
+            // Convert tanggal_lahir string ke Date object
+            if (userData.tanggal_lahir) {
+                const dateParts = userData.tanggal_lahir.split('-'); // Format: YYYY-MM-DD
+                if (dateParts.length === 3) {
+                    const date = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+                    setTanggalLahir(date);
+                }
+            } else {
+                setTanggalLahir(null);
+            }
+
             fetchProvinsi();
             if (userData.provinsi_id) fetchKota(String(userData.provinsi_id));
             if (userData.kota_id) fetchKecamatan(String(userData.kota_id));
@@ -82,13 +96,19 @@ export default function EditProfileModal({ visible, onClose, userData, onSave }:
 
     const handleSave = async () => {
         setLoading(true);
+
+        // Convert Date object ke string format YYYY-MM-DD
+        const tanggalLahirString = tanggalLahir
+            ? `${tanggalLahir.getFullYear()}-${String(tanggalLahir.getMonth() + 1).padStart(2, '0')}-${String(tanggalLahir.getDate()).padStart(2, '0')}`
+            : '';
+
         const payload = {
             id_konsumen: form.id_konsumen,
             no_hp: form.no_hp,
             nama_lengkap: form.nama_lengkap,
             email: form.email,
             jenis_kelamin: form.jenis_kelamin,
-            tanggal_lahir: form.tanggal_lahir,
+            tanggal_lahir: tanggalLahirString,
             tempat_lahir: form.tempat_lahir,
             provinsi_id: form.provinsi_id,
             kota_id: form.kota_id,
@@ -153,6 +173,12 @@ export default function EditProfileModal({ visible, onClose, userData, onSave }:
                                 label="Tempat Lahir"
                                 value={form.tempat_lahir || ''}
                                 onChangeText={text => handleChange('tempat_lahir', text)}
+                            />
+                            <DatePickerInput
+                                label="Tanggal Lahir"
+                                value={tanggalLahir || new Date()}
+                                onChange={setTanggalLahir}
+                                placeholder="Pilih tanggal lahir"
                             />
                             <Input
                                 label="Alamat"

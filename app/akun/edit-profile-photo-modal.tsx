@@ -17,12 +17,9 @@ function EditProfilePhotoModal({ visible, onClose, userData, onSave }: {
 
     useEffect(() => {
         if (visible && userData) {
-            // Set form dengan data kendaraan yang ada
+            // Set form dengan data user yang ada
             const processedData = {
                 no_hp: userData.no_hp || '',
-                type_kendaraan: userData.type_kendaraan || userData.id_jenis_kendaraan || '',
-                merek: userData.merek || '',
-                plat_nomor: userData.plat_nomor || '',
             };
             console.log('User data for profile photo modal:', userData);
             console.log('Processed form data:', processedData);
@@ -51,18 +48,6 @@ function EditProfilePhotoModal({ visible, onClose, userData, onSave }: {
             Alert.alert('Error', 'No HP harus diisi');
             return;
         }
-        if (!form.type_kendaraan && !form.id_jenis_kendaraan) {
-            Alert.alert('Error', 'Tipe kendaraan harus diisi');
-            return;
-        }
-        if (!form.merek) {
-            Alert.alert('Error', 'Merek kendaraan harus diisi');
-            return;
-        }
-        if (!form.plat_nomor) {
-            Alert.alert('Error', 'Plat nomor harus diisi');
-            return;
-        }
 
         // Cek apakah ada foto yang diupload
         if (!fotoDiri) {
@@ -77,30 +62,24 @@ function EditProfilePhotoModal({ visible, onClose, userData, onSave }: {
         setLoading(true);
         try {
             // Siapkan payload sesuai backend
-            const typeKendaraan = form.type_kendaraan === '1' ? 'Motor' :
-                                form.type_kendaraan === '2' ? 'Mobil' :
-                                form.type_kendaraan;
-
             const payload = {
                 no_hp: form.no_hp,
-                type_kendaraan: typeKendaraan,
-                merek: form.merek,
-                plat_nomor: form.plat_nomor,
                 foto_diri_uri: fotoDiri,
             };
 
             console.log('Sending payload for profile photo:', payload);
 
-            const response = await apiService.updateKelengkapanData(payload);
+            const response = await apiService.updateProfileFoto(payload);
             console.log('API Response:', response);
 
             if (response.success) {
                 try {
                     const userData = await AsyncStorage.getItem('userData');
                     let parsed = userData ? JSON.parse(userData) : {};
-                    // Update foto_diri dengan URL dari response jika ada
-                    if (response.data?.foto_diri) {
-                        parsed.foto_diri = response.data.foto_diri;
+                    // Update foto dengan URL dari response jika ada
+                    if (response.data?.data?.foto) {
+                        parsed.foto = response.data.data.foto;
+                        parsed.foto_diri = response.data.data.foto_diri;
                     }
                     await AsyncStorage.setItem('userData', JSON.stringify(parsed));
                     onSave(parsed);
@@ -115,7 +94,7 @@ function EditProfilePhotoModal({ visible, onClose, userData, onSave }: {
             }
         } catch (error) {
             console.error('Save error:', error);
-            Alert.alert('Error', 'Terjadi kesalahan jaringan. Periksa koneksi internet Anda.');
+            Alert.alert('Error', 'Terjadi kesalahan jaringan. Periksa koneksi internet Anda. Dan coba lagi');
         } finally {
             setLoading(false);
         }
@@ -209,41 +188,14 @@ const styles = StyleSheet.create({
     closeButton: {
         padding: 4,
     },
-    requiredDataSection: {
+    uploadSection: {
         marginBottom: 24,
-        padding: 16,
-        backgroundColor: '#f8f9fa',
-        borderRadius: 8,
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: 'bold',
         color: '#212529',
         marginBottom: 12,
-    },
-    warningText: {
-        fontSize: 14,
-        color: '#dc3545',
-        marginBottom: 12,
-        fontStyle: 'italic',
-    },
-    label: {
-        fontSize: 14,
-        color: '#6c757d',
-        marginTop: 12,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#dee2e6',
-        borderRadius: 8,
-        padding: 10,
-        fontSize: 16,
-        color: '#212529',
-        marginTop: 4,
-        marginBottom: 8,
-    },
-    uploadSection: {
-        marginBottom: 24,
     },
     uploadButton: {
         backgroundColor: '#e7f1ff',

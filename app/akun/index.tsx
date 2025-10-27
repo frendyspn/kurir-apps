@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackHandler, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import KendaraanModal from './kendaraan-modal';
 import ProfileModal from './profile-modal';
@@ -27,6 +27,17 @@ function AkunScreen() {
         fetchUserData();
     }, []);
 
+    useEffect(() => {
+        const backAction = () => {
+            router.back();
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+        return () => backHandler.remove();
+    }, []);
+
     // Handle profile save callback
     const handleProfileSave = useCallback((data: any) => {
         // Refresh user data from AsyncStorage
@@ -38,12 +49,19 @@ function AkunScreen() {
         item.action();
     }, []);
 
+    // Get user badge based on user data
+    const getUserBadge = useCallback(() => {
+        if (userData?.agen === '1') return { text: 'Agen', color: '#28a745' };
+        if (userData?.koordinator_kota === '1') return { text: 'Koordinator Kota', color: '#007bff' };
+        if (userData?.koordinator_kecamatan === '1') return { text: 'Koordinator Kecamatan', color: '#6f42c1' };
+        return null;
+    }, [userData]);
+
     // Menu items for account screen
     const menuItems = [
         { id: 1, name: 'Profile', icon: 'person-outline', action: () => setShowProfileModal(true) },
         { id: 2, name: 'Kendaraan', icon: 'car-outline', action: () => setShowKendaraanModal(true) },
-        { id: 3, name: 'Transaksi Manual', icon: 'create-outline', action: () => router.push('/transaksi-manual') },
-        { id: 4, name: 'Logout', icon: 'log-out-outline', action: () => router.push('/auth/logout') },
+        { id: 3, name: 'Logout', icon: 'log-out-outline', action: () => router.push('/auth/logout') },
     ];
 
     return (
@@ -70,9 +88,9 @@ function AkunScreen() {
                 {/* User Info Card */}
                 <View style={styles.userCard}>
                     <View style={styles.userAvatar}>
-                        {userData?.foto_diri ? (
+                        {userData?.foto ? (
                             <Image
-                                source={{ uri: userData.foto_diri }}
+                                source={{ uri: userData.foto }}
                                 style={{ width: 60, height: 60, borderRadius: 30 }}
                                 resizeMode="cover"
                             />
@@ -83,6 +101,11 @@ function AkunScreen() {
                     <View style={styles.userInfo}>
                         <Text style={styles.userName}>{userData?.nama_lengkap || 'Nama Lengkap'}</Text>
                         <Text style={styles.userPhone}>{userData?.no_hp || 'No HP'}</Text>
+                        {getUserBadge() && (
+                            <View style={[styles.userBadge, { backgroundColor: getUserBadge()?.color }]}>
+                                <Text style={styles.userBadgeText}>{getUserBadge()?.text}</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 
@@ -177,6 +200,18 @@ const styles = StyleSheet.create({
     userPhone: {
         fontSize: 14,
         color: '#6c757d',
+    },
+    userBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+        marginBottom: 4,
+    },
+    userBadgeText: {
+        fontSize: 12,
+        color: '#ffffff',
+        fontWeight: '600',
     },
     menuContainer: {
         backgroundColor: '#ffffff',
