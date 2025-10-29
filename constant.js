@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
     ORDER_MONTHLY: `${API_BASE_URL}/kurir/v1/orders/monthly`,
     JENIS_LAYANAN: `${API_BASE_URL}/kurir/v1/jenis-layanan`,
     LIST_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/transaksi-manual`,
+    LIST_TRANSAKSI_MANUAL_KONSUMEN: `${API_BASE_URL}/kurir/v1/transaksi-manual-konsumen`,
     LIST_AGENT: `${API_BASE_URL}/kurir/v1/list-agen`,
     LIST_PELANGGAN: `${API_BASE_URL}/kurir/v1/list-pelanggan`,
     TAMBAH_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/save-transaksi-manual`,
@@ -39,6 +40,8 @@ export const API_ENDPOINTS = {
     UPDATE_KELENGKAPAN_DATA: `${API_BASE_URL}/kurir/register/update-kelengkapan-data`,
     UPDATE_PROFILE_FOTO: `${API_BASE_URL}/kurir/v1/update-profile-foto`,
     UPDATE_KONSUMEN: `${API_BASE_URL}/kurir/v1/update-konsumen`,
+    UPDATE_KONSUMEN_SIMPLE: `${API_BASE_URL}/kurir/v1/update-konsumen-simple`,
     GET_KONSUMEN: `${API_BASE_URL}/kurir/v1/get-pelanggan`,
     ADD_KONSUMEN: `${API_BASE_URL}/kurir/v1/add-pelanggan`,
+    DELETE_KONSUMEN: `${API_BASE_URL}/kurir/v1/delete-konsumen`,
 };

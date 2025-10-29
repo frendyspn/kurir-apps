@@ -1,9 +1,10 @@
+import TransaksiDetailModal from '@/components/transaksi-detail-modal';
 import { apiService } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, BackHandler, FlatList, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, BackHandler, FlatList, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Contact = {
@@ -16,15 +17,39 @@ type Contact = {
 
 export default function DetailKontakScreen() {
     const navigation = useNavigation();
-    const { contact } = useLocalSearchParams<{ contact: string }>();
-    const contactData: Contact = contact ? JSON.parse(contact) : null;
+    const { contact, refresh } = useLocalSearchParams<{ contact: string; refresh?: string }>();
+    const initialContactData: Contact = contact ? JSON.parse(contact) : null;
+
+    // State untuk data kontak yang bisa diupdate
+    const [currentContactData, setCurrentContactData] = useState<Contact | null>(initialContactData);
+
+    // Update contact data when parameters change (e.g., after editing)
+    useEffect(() => {
+        if (contact) {
+            const newContactData = JSON.parse(contact);
+            console.log('Contact data updated from params:', newContactData);
+            setCurrentContactData(newContactData);
+        }
+    }, [contact]);
 
     // State untuk transaksi
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loadingTransactions, setLoadingTransactions] = useState(false);
     const [transactionsError, setTransactionsError] = useState<string | null>(null);
 
+    // State untuk menu options
+    const [showMenu, setShowMenu] = useState(false);
+
+    // State untuk modal detail transaksi
+    const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+    const [showDetailModal, setShowDetailModal] = useState(false);
+
+    // Track if this is the first load
+    const isFirstLoad = useRef(true);
+
     const fetchTransactions = useCallback(async () => {
+        if (!currentContactData?.id_konsumen) return;
+        
         try {
             setLoadingTransactions(true);
             setTransactionsError(null);
@@ -45,11 +70,11 @@ export default function DetailKontakScreen() {
             const startDateStr = startDate.toISOString().split('T')[0];
             const endDateStr = endDate.toISOString().split('T')[0];
 
-            const response = await apiService.getListTransaksiManual(
-                user.no_hp,
+            const response = await apiService.getListTransaksiManualKonsumen(
+                currentContactData.no_hp,
                 startDateStr,
                 endDateStr,
-                contactData.id_konsumen // Filter by customer ID
+                currentContactData.id_konsumen // Filter by customer ID
             );
 
             if (response.success && response.data && response.data.data) {
@@ -68,7 +93,7 @@ export default function DetailKontakScreen() {
         } finally {
             setLoadingTransactions(false);
         }
-    }, [contactData?.id_konsumen]);
+    }, [currentContactData?.id_konsumen, currentContactData?.no_hp]);
 
     useEffect(() => {
         // Triple protection against headers
@@ -92,14 +117,52 @@ export default function DetailKontakScreen() {
         return () => backHandler.remove();
     }, [navigation]);
 
-    // Separate useEffect for fetching transactions
+    // Separate useEffect for fetching transactions on initial load
     useEffect(() => {
-        if (contactData?.id_konsumen) {
+        if (currentContactData?.id_konsumen && isFirstLoad.current) {
             fetchTransactions();
+            isFirstLoad.current = false;
         }
-    }, [contactData?.id_konsumen, fetchTransactions]);
+    }, [currentContactData?.id_konsumen]); // Remove fetchTransactions from dependency
 
-    if (!contactData) {
+    // Function to fetch updated contact data
+    const fetchContactData = useCallback(async () => {
+        if (!currentContactData?.id_konsumen) return;
+
+        try {
+            console.log('Fetching updated contact data for:', currentContactData.id_konsumen);
+            const response = await apiService.getKonsumen(currentContactData.id_konsumen);
+            console.log('Contact data response:', response);
+            if (response.success && response.data) {
+                // Update the contact data with fresh data from API
+                const updatedData = {
+                    ...currentContactData,
+                    ...response.data,
+                    // Ensure id_konsumen stays the same
+                    id_konsumen: currentContactData.id_konsumen
+                };
+                console.log('Updating contact data to:', updatedData);
+                setCurrentContactData(updatedData);
+            }
+        } catch (error) {
+            console.error('Error fetching updated contact data:', error);
+            // Don't show error to user, just keep existing data
+        }
+    }, []); // Remove dependency to prevent infinite loops
+
+    // Refresh transactions when screen comes back into focus
+    useFocusEffect(
+        useCallback(() => {
+            console.log('Screen focused');
+            // Only refresh transactions, contact data is updated via navigation params
+            if (currentContactData?.id_konsumen) {
+                console.log('Refreshing transactions...');
+                fetchTransactions();
+            }
+        }, [currentContactData?.id_konsumen])
+    );
+
+    if (!currentContactData) {
         return (
             <SafeAreaView style={styles.container} edges={['left', 'right']}>
                 <View style={styles.errorContainer}>
@@ -116,37 +179,161 @@ export default function DetailKontakScreen() {
     }
 
     const handleCall = () => {
-        Linking.openURL(`tel:${contactData.no_hp}`);
+        if (currentContactData) {
+            Linking.openURL(`tel:${currentContactData.no_hp}`);
+        }
     };
 
     const handleWhatsApp = () => {
-        const whatsappUrl = `https://wa.me/${contactData.no_hp.replace(/^0/, '62')}`;
-        Linking.openURL(whatsappUrl);
+        if (currentContactData) {
+            const whatsappUrl = `https://wa.me/${currentContactData.no_hp.replace(/^0/, '62')}`;
+            Linking.openURL(whatsappUrl);
+        }
     };
 
     const handleTambahTransaksi = () => {
-        router.push({
-            pathname: '/transaksi-manual/tambah',
-            params: { selectedCustomer: JSON.stringify(contactData) }
-        });
+        if (currentContactData) {
+            router.push({
+                pathname: '/transaksi-manual/tambah',
+                params: { selectedCustomer: JSON.stringify(currentContactData) }
+            });
+        }
+    };
+
+    const handleEditKontak = () => {
+        if (currentContactData) {
+            router.push({
+                pathname: '/kontak/edit',
+                params: { contact: JSON.stringify(currentContactData) }
+            });
+        }
+    };
+
+    const handleDeleteKontak = () => {
+        if (!currentContactData) return;
+
+        Alert.alert(
+            'Hapus Kontak',
+            `Apakah Anda yakin ingin menghapus kontak ${currentContactData.nama_lengkap}?`,
+            [
+                {
+                    text: 'Batal',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Hapus',
+                    style: 'destructive',
+                    onPress: performDeleteKontak,
+                },
+            ]
+        );
+    };
+
+    const performDeleteKontak = async () => {
+        if (!currentContactData) return;
+
+        try {
+            const userData = await AsyncStorage.getItem('userData');
+            if (!userData) {
+                Alert.alert('Error', 'Data user tidak ditemukan');
+                return;
+            }
+
+            const user = JSON.parse(userData);
+
+            const response = await apiService.deleteKontak({
+                id_konsumen: currentContactData.id_konsumen,
+                no_hp_user: user.no_hp,
+            });
+
+            if (response.success) {
+                Alert.alert('Berhasil', 'Kontak berhasil dihapus', [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            router.back();
+                        },
+                    },
+                ]);
+            } else {
+                Alert.alert('Error', response.message || 'Gagal menghapus kontak');
+            }
+        } catch (error) {
+            console.error('Error deleting kontak:', error);
+            Alert.alert('Error', 'Terjadi kesalahan saat menghapus kontak');
+        }
+    };
+
+    const handleTransactionPress = (transaction: any) => {
+        setSelectedTransaction(transaction);
+        setShowDetailModal(true);
+    };
+
+    const handleCloseDetailModal = () => {
+        setShowDetailModal(false);
+        setSelectedTransaction(null);
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
             {/* Header Custom */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
                     <Ionicons name="chevron-back-outline" size={24} color="#ffffff" />
                 </TouchableOpacity>
                 <Text style={styles.logo}>Detail Kontak</Text>
-                <View style={{ width: 24 }} />
+                <TouchableOpacity onPress={() => setShowMenu(true)} style={styles.headerMenuButton}>
+                    <Ionicons name="ellipsis-vertical" size={24} color="#ffffff" />
+                </TouchableOpacity>
             </View>
+
+            {/* Menu Overlay */}
+            {showMenu && (
+                <Modal
+                    visible={showMenu}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setShowMenu(false)}
+                >
+                    <TouchableOpacity
+                        style={styles.menuOverlay}
+                        activeOpacity={1}
+                        onPress={() => setShowMenu(false)}
+                    >
+                        <View style={styles.menuContainer}>
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={() => {
+                                    setShowMenu(false);
+                                    handleEditKontak();
+                                }}
+                            >
+                                <Ionicons name="create-outline" size={20} color="#0d6efd" />
+                                <Text style={styles.menuItemText}>Edit Kontak</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.menuDivider} />
+
+                            <TouchableOpacity
+                                style={[styles.menuItem, styles.menuItemDelete]}
+                                onPress={() => {
+                                    setShowMenu(false);
+                                    handleDeleteKontak();
+                                }}
+                            >
+                                <Ionicons name="trash-outline" size={20} color="#dc3545" />
+                                <Text style={[styles.menuItemText, styles.menuItemTextDelete]}>Hapus Kontak</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+            )}
 
             <View style={styles.content}>
                 {/* Contact Header */}
                 <View style={styles.headerCard}>
-                    <Text style={styles.contactName}>{contactData.nama_lengkap}</Text>
-                    <Text style={styles.contactDescription}>{contactData.alamat_lengkap}</Text>
+                    <Text style={styles.contactName}>{currentContactData.nama_lengkap}</Text>
+                    <Text style={styles.contactDescription}>{currentContactData.alamat_lengkap}</Text>
                 </View>
 
                 {/* Contact Info */}
@@ -155,89 +342,117 @@ export default function DetailKontakScreen() {
                         <Ionicons name="call" size={20} color="#0d6efd" />
                         <View style={styles.infoContent}>
                             <Text style={styles.infoLabel}>Telepon</Text>
-                            <Text style={styles.infoValue}>{contactData.no_hp}</Text>
+                            <Text style={styles.infoValue}>{currentContactData.no_hp}</Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Action Buttons */}
-                <View style={styles.actionsContainer}>
-                    <View style={styles.actionRow}>
-                        <TouchableOpacity style={[styles.actionButton, styles.callButton]} onPress={handleCall}>
-                            <Ionicons name="call" size={20} color="#fff" />
-                            <Text style={styles.actionButtonText}>Telepon</Text>
-                        </TouchableOpacity>
+                {/* Scrollable Content */}
+                <ScrollView 
+                    style={styles.scrollContainer}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollContent}
+                >
+                    {/* Action Buttons */}
+                    <View style={styles.actionsContainer}>
+                        <View style={styles.actionRow}>
+                            <TouchableOpacity style={[styles.actionButton, styles.callButton]} onPress={handleCall}>
+                                <Ionicons name="call" size={20} color="#fff" />
+                                <Text style={styles.actionButtonText}>Telepon</Text>
+                            </TouchableOpacity>
 
-                        <TouchableOpacity style={[styles.actionButton, styles.whatsappButton]} onPress={handleWhatsApp}>
-                            <Ionicons name="logo-whatsapp" size={20} color="#fff" />
-                            <Text style={styles.actionButtonText}>WhatsApp</Text>
-                        </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionButton, styles.whatsappButton]} onPress={handleWhatsApp}>
+                                <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+                                <Text style={styles.actionButtonText}>WhatsApp</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.actionRow}>
+                            <TouchableOpacity style={[styles.actionButton, styles.transaksiButton]} onPress={handleTambahTransaksi}>
+                                <Ionicons name="add-circle" size={20} color="#fff" />
+                                <Text style={styles.actionButtonText}>Tambah Transaksi</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
-                    <View style={styles.actionRow}>
-                        <TouchableOpacity style={[styles.actionButton, styles.transaksiButton]} onPress={handleTambahTransaksi}>
-                            <Ionicons name="add-circle" size={20} color="#fff" />
-                            <Text style={styles.actionButtonText}>Tambah Transaksi</Text>
-                        </TouchableOpacity>
+                    {/* Transaction History */}
+                    <View style={styles.transactionsSection}>
+                        <Text style={styles.sectionTitle}>Riwayat Transaksi</Text>
+                        
+                        {loadingTransactions ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="small" color="#0d6efd" />
+                                <Text style={styles.loadingText}>Memuat transaksi...</Text>
+                            </View>
+                        ) : transactionsError ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>{transactionsError}</Text>
+                            </View>
+                        ) : transactions.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                                <Ionicons name="receipt-outline" size={48} color="#6c757d" />
+                                <Text style={styles.emptyText}>Belum ada transaksi</Text>
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={transactions}
+                                keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity style={styles.transactionItem} onPress={() => handleTransactionPress(item)}>
+                                        <View style={styles.transactionHeader}>
+                                            <Text style={styles.transactionService}>{item.jenis_layanan || 'N/A'}</Text>
+                                            <Text style={styles.transactionDate}>
+                                                {item.tanggal_order ? new Date(item.tanggal_order).toLocaleDateString('id-ID') : 'N/A'}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.transactionDetails}>
+                                            <Text style={styles.transactionAddress} numberOfLines={1}>
+                                                {item.alamat_jemput || 'N/A'}
+                                            </Text>
+                                            <Text style={styles.transactionAmount}>
+                                                Rp {item.tarif ? parseInt(item.tarif).toLocaleString('id-ID') : '0'}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.transactionStatus}>
+                                            <Text style={[
+                                                styles.statusText,
+                                                item.status === 'FINISH' ? styles.statusCompleted :
+                                                item.status === 'PENDING' ? styles.statusPending :
+                                                styles.statusCancelled
+                                            ]}>
+                                                {item.status || 'PENDING'}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={styles.transactionsList}
+                                scrollEnabled={false} // Disable FlatList scrolling since parent ScrollView handles it
+                            />
+                        )}
                     </View>
-                </View>
 
-                {/* Transaction History */}
-                <View style={styles.transactionsSection}>
-                    <Text style={styles.sectionTitle}>Riwayat Transaksi</Text>
-                    
-                    {loadingTransactions ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="small" color="#0d6efd" />
-                            <Text style={styles.loadingText}>Memuat transaksi...</Text>
-                        </View>
-                    ) : transactionsError ? (
-                        <View style={styles.errorContainer}>
-                            <Text style={styles.errorText}>{transactionsError}</Text>
-                        </View>
-                    ) : transactions.length === 0 ? (
-                        <View style={styles.emptyContainer}>
-                            <Ionicons name="receipt-outline" size={48} color="#6c757d" />
-                            <Text style={styles.emptyText}>Belum ada transaksi</Text>
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={transactions}
-                            keyExtractor={(item, index) => item.id_transaksi?.toString() || index.toString()}
-                            renderItem={({ item }) => (
-                                <View style={styles.transactionItem}>
-                                    <View style={styles.transactionHeader}>
-                                        <Text style={styles.transactionService}>{item.nama_layanan || 'N/A'}</Text>
-                                        <Text style={styles.transactionDate}>
-                                            {item.tanggal_order ? new Date(item.tanggal_order).toLocaleDateString('id-ID') : 'N/A'}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.transactionDetails}>
-                                        <Text style={styles.transactionAddress} numberOfLines={1}>
-                                            {item.alamat_penjemputan || 'N/A'}
-                                        </Text>
-                                        <Text style={styles.transactionAmount}>
-                                            Rp {item.biaya_antar ? parseInt(item.biaya_antar).toLocaleString('id-ID') : '0'}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.transactionStatus}>
-                                        <Text style={[
-                                            styles.statusText,
-                                            item.status === 'COMPLETED' ? styles.statusCompleted :
-                                            item.status === 'PENDING' ? styles.statusPending :
-                                            styles.statusCancelled
-                                        ]}>
-                                            {item.status || 'PENDING'}
-                                        </Text>
-                                    </View>
-                                </View>
-                            )}
-                            showsVerticalScrollIndicator={false}
-                            contentContainerStyle={styles.transactionsList}
-                        />
-                    )}
-                </View>
+                    {/* Bottom Spacing */}
+                    <View style={{ height: 20 }} />
+                </ScrollView>
             </View>
+
+            {/* Transaction Detail Modal */}
+            <Modal
+                visible={showDetailModal}
+                animationType="slide"
+                transparent={false}
+                onRequestClose={handleCloseDetailModal}
+            >
+                {selectedTransaction && (
+                    <TransaksiDetailModal
+                        transaksi={selectedTransaction}
+                        onClose={handleCloseDetailModal}
+                        onRefresh={fetchTransactions}
+                        showApproveSection={true}
+                    />
+                )}
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -266,9 +481,18 @@ const styles = StyleSheet.create({
     headerBackButton: {
         padding: 8,
     },
+    headerMenuButton: {
+        padding: 8,
+    },
     content: {
         flex: 1,
         padding: 16,
+    },
+    scrollContainer: {
+        flex: 1,
+    },
+    scrollContent: {
+        paddingBottom: 20,
     },
     errorContainer: {
         flex: 1,
@@ -478,5 +702,47 @@ const styles = StyleSheet.create({
     statusCancelled: {
         backgroundColor: '#f8d7da',
         color: '#721c24',
+    },
+    menuOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-start',
+        alignItems: 'flex-end',
+        paddingTop: 60,
+        paddingRight: 16,
+    },
+    menuContainer: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        paddingVertical: 8,
+        minWidth: 180,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    menuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 12,
+    },
+    menuItemDelete: {
+        // Additional styling for delete item if needed
+    },
+    menuItemText: {
+        fontSize: 16,
+        color: '#212529',
+        fontWeight: '500',
+    },
+    menuItemTextDelete: {
+        color: '#dc3545',
+    },
+    menuDivider: {
+        height: 1,
+        backgroundColor: '#dee2e6',
+        marginHorizontal: 8,
     },
 });

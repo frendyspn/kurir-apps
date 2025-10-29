@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router, useNavigation } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Alert, BackHandler, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router, useFocusEffect, useNavigation } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, BackHandler, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiService } from '@/services/api';
@@ -14,6 +14,8 @@ export default function KontakScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [idKonsumen, setIdKonsumen] = useState<string>('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filteredContacts, setFilteredContacts] = useState<any[]>([]);
 
     useEffect(() => {
         const initializeData = async () => {
@@ -23,6 +25,7 @@ export default function KontakScreen() {
                 if (storedIdStr) {
                     const storedId = JSON.parse(storedIdStr);
                     setIdKonsumen(storedId.id_konsumen);
+                    
                     // Fetch contacts from API
                     await fetchContacts(storedId.id_konsumen);
                 } else {
@@ -56,7 +59,21 @@ export default function KontakScreen() {
         return () => backHandler.remove();
     }, [navigation]);
 
-    const fetchContacts = async (id: string) => {
+    // Filter contacts based on search query
+    useEffect(() => {
+        if (searchQuery.trim() === '') {
+            setFilteredContacts(contacts);
+        } else {
+            const filtered = contacts.filter(contact =>
+                contact.nama_lengkap?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                contact.no_hp?.includes(searchQuery) ||
+                contact.alamat_lengkap?.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+            setFilteredContacts(filtered);
+        }
+    }, [contacts, searchQuery]);
+
+    const fetchContacts = useCallback(async (id: string) => {
         try {
             setLoading(true);
             const response = await apiService.getKonsumen(id);
@@ -78,7 +95,17 @@ export default function KontakScreen() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    // Refresh contacts when screen comes back into focus (after delete operation)
+    useFocusEffect(
+        useCallback(() => {
+            if (idKonsumen) {
+                console.log('Refreshing contacts list...');
+                fetchContacts(idKonsumen);
+            }
+        }, [idKonsumen, fetchContacts])
+    );
 
     const onRefresh = async () => {
         if (!idKonsumen) return;
@@ -123,22 +150,37 @@ export default function KontakScreen() {
 
             {/* Content */}
             <View style={styles.content}>
-                {/* Search Bar Placeholder */}
+                {/* Search Bar */}
                 <View style={styles.searchContainer}>
                     <Ionicons name="search" size={20} color="#6c757d" style={styles.searchIcon} />
-                    <Text style={styles.searchPlaceholder}>Cari kontak...</Text>
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Cari kontak..."
+                        placeholderTextColor="#6c757d"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                    />
                 </View>
 
                 {/* Contact List */}
-                {contacts.length === 0 && !loading ? (
+                {filteredContacts.length === 0 && !loading ? (
                     <View style={styles.emptyContainer}>
                         <Ionicons name="people" size={64} color="#6c757d" />
-                        <Text style={styles.emptyText}>Tidak ada kontak</Text>
-                        <Text style={styles.emptySubtext}>Belum ada kontak yang ditambahkan</Text>
+                        <Text style={styles.emptyText}>
+                            {searchQuery.trim() !== '' ? 'Kontak tidak ditemukan' : 'Tidak ada kontak'}
+                        </Text>
+                        <Text style={styles.emptySubtext}>
+                            {searchQuery.trim() !== '' 
+                                ? 'Coba kata kunci yang berbeda' 
+                                : 'Belum ada kontak yang ditambahkan'
+                            }
+                        </Text>
                     </View>
                 ) : (
                     <FlatList
-                        data={contacts}
+                        data={filteredContacts}
                         keyExtractor={(item, index) => item.id_konsumen ? item.id_konsumen.toString() : `contact-${index}`}
                         renderItem={renderContactItem}
                         showsVerticalScrollIndicator={false}
@@ -211,9 +253,9 @@ const styles = StyleSheet.create({
     searchIcon: {
         marginRight: 12,
     },
-    searchPlaceholder: {
+    searchInput: {
         fontSize: 16,
-        color: '#6c757d',
+        color: '#212529',
         flex: 1,
     },
     listContainer: {

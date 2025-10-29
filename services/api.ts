@@ -200,6 +200,38 @@ class ApiService {
         });
     }
 
+
+    async getListTransaksiManualKonsumen(
+        phoneNumber: string,
+        startDate: string,
+        endDate: string,
+        idKonsumen?: string,
+        serviceType?: string,
+        searchQuery?: string
+    ): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', phoneNumber);
+        formData.append('start_date', startDate);
+        formData.append('end_date', endDate);
+
+        if (idKonsumen) {
+            formData.append('id_konsumen', idKonsumen);
+        }
+
+        if (serviceType) {
+            formData.append('service_type', serviceType);
+        }
+
+        if (searchQuery) {
+            formData.append('search', searchQuery);
+        }
+
+        return this.request(API_ENDPOINTS.LIST_TRANSAKSI_MANUAL_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
     // Get List Agent
     async getListAgent(phoneNumber: string): Promise<ApiResponse> {
         const formData = new FormData();
@@ -546,6 +578,44 @@ class ApiService {
         formData.append('alamat_lengkap', data.alamat_lengkap);
 
         return this.request(API_ENDPOINTS.ADD_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+        // Update Kontak (untuk edit kontak sederhana)
+    async updateKontak(data: {
+        id_konsumen: string;
+        nama_lengkap: string;
+        no_hp: string;
+        alamat_lengkap: string;
+        no_hp_user: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('id_konsumen', data.id_konsumen);
+        formData.append('nama_lengkap', data.nama_lengkap);
+        formData.append('no_hp', data.no_hp);
+        formData.append('alamat', data.alamat_lengkap);
+        formData.append('no_hp_user', data.no_hp_user);
+
+        return this.request(API_ENDPOINTS.UPDATE_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Delete Kontak (update referral_id untuk soft delete)
+    async deleteKontak(data: {
+        id_konsumen: string;
+        no_hp_user: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('id_konsumen', data.id_konsumen);
+        formData.append('no_hp', data.no_hp_user);
+
+        return this.request(API_ENDPOINTS.DELETE_KONSUMEN, {
             method: 'POST',
             body: formData,
         });
