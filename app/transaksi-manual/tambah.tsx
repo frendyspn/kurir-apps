@@ -273,7 +273,7 @@ export default function TambahTransaksiScreen() {
             {/* Content */}
             <ScrollView 
                 style={styles.content}
-                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 40 }}
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 120 }}
             >
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Form Transaksi Manual</Text>

@@ -50,7 +50,7 @@ class ApiService {
                         data: data,
                         message: data.Message || 'Success',
                     };
-                } else if (response.status === 400 || response.status === 401 || response.status === 429) {
+                } else if (response.status === 400 || response.status === 401 || response.status === 429 || response.status === 404) {
                     console.log('masuk 400')
                     return {
                         success: false,
@@ -607,6 +607,7 @@ class ApiService {
 
     // Delete Kontak (update referral_id untuk soft delete)
     async deleteKontak(data: {
+        token: string;
         id_konsumen: string;
         no_hp_user: string;
     }): Promise<ApiResponse> {
@@ -614,8 +615,81 @@ class ApiService {
 
         formData.append('id_konsumen', data.id_konsumen);
         formData.append('no_hp', data.no_hp_user);
+        formData.append('token', data.token);
 
         return this.request(API_ENDPOINTS.DELETE_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Get Transaction History
+    async getTransactionHistory(
+        phoneNumber: string,
+        startDate?: string,
+        endDate?: string
+    ): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', phoneNumber);
+
+        if (startDate) {
+            formData.append('start_date', startDate);
+        }
+
+        if (endDate) {
+            formData.append('end_date', endDate);
+        }
+
+        return this.request(API_ENDPOINTS.GET_TRANSACTION_HISTORY, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Get Top Up Methods
+    async getTopUpMethods(): Promise<ApiResponse> {
+        return this.request(API_ENDPOINTS.GET_TOP_UP_METHODS, {
+            method: 'GET',
+        });
+    }
+
+    // Create Top Up Request
+    async createTopUpRequest(data: {
+        no_hp: string;
+        amount: string;
+        bank_id: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', data.no_hp);
+        formData.append('amount', data.amount);
+        formData.append('bank_id', data.bank_id);
+
+        return this.request(API_ENDPOINTS.CREATE_TOP_UP_REQUEST, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Upload Top Up Proof
+    async uploadTopUpProof(data: {
+        top_up_id: string;
+        bukti_transfer_uri: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('top_up_id', data.top_up_id);
+
+        if (data.bukti_transfer_uri && data.bukti_transfer_uri.trim() !== '') {
+            const uriParts = data.bukti_transfer_uri.split('.');
+            const fileType = uriParts[uriParts.length - 1];
+            
+            formData.append('bukti_transfer', {
+                uri: data.bukti_transfer_uri,
+                name: `bukti_transfer_${data.top_up_id}_${Date.now()}.${fileType}`,
+                type: `image/${fileType}`,
+            } as any);
+        }
+
+        return this.request(API_ENDPOINTS.UPLOAD_TOP_UP_PROOF, {
             method: 'POST',
             body: formData,
         });

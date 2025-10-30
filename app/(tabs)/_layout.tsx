@@ -45,6 +45,13 @@ export default function TabLayout() {
                     }}
                 />
                 <Tabs.Screen
+                    name="history"
+                    options={{
+                        title: 'History',
+                        tabBarIcon: ({ color }) => <Ionicons name="time" size={24} color={color} />,
+                    }}
+                />
+                <Tabs.Screen
                     name="transaksi"
                     options={{
                         title: 'Transaksi',
@@ -52,12 +59,13 @@ export default function TabLayout() {
                     }}
                 />
                 <Tabs.Screen
-                    name="history"
+                    name="saldo"
                     options={{
-                        title: 'History',
-                        tabBarIcon: ({ color }) => <Ionicons name="time" size={24} color={color} />,
+                        title: 'Saldo',
+                        tabBarIcon: ({ color }) => <Ionicons name="wallet" size={24} color={color} />,
                     }}
                 />
+                
                 <Tabs.Screen
                     name="kontak"
                     options={{
@@ -70,6 +78,8 @@ export default function TabLayout() {
                         headerRight: undefined,
                     }}
                 />
+
+                
 
 
                 

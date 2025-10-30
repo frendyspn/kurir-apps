@@ -197,7 +197,7 @@ export default function KontakScreen() {
                 )}
 
                 {/* Bottom Spacing for Tab Bar */}
-                <View style={{ height: Math.max(insets.bottom, 20) + 20 }} />
+                <View style={{ height: Math.max(insets.bottom, 20) + 120 }} />
             </View>
         </SafeAreaView>
     );

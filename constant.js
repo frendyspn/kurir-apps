@@ -44,4 +44,8 @@ export const API_ENDPOINTS = {
     GET_KONSUMEN: `${API_BASE_URL}/kurir/v1/get-pelanggan`,
     ADD_KONSUMEN: `${API_BASE_URL}/kurir/v1/add-pelanggan`,
     DELETE_KONSUMEN: `${API_BASE_URL}/kurir/v1/delete-konsumen`,
+    GET_TRANSACTION_HISTORY: `${API_BASE_URL}/v1/get_transaction_history`,
+    GET_TOP_UP_METHODS: `${API_BASE_URL}/v1/get_top_up_methods`,
+    CREATE_TOP_UP_REQUEST: `${API_BASE_URL}/v1/create_top_up_request`,
+    UPLOAD_TOP_UP_PROOF: `${API_BASE_URL}/v1/upload_top_up_proof`,
 };

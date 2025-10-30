@@ -27,6 +27,8 @@ export default function RootLayout() {
           <Stack.Screen name="auth/otp" options={{ headerShown: false }} />
           <Stack.Screen name="auth/register" options={{ headerShown: false }} />
           <Stack.Screen name="akun" options={{ headerShown: false }} />
+          <Stack.Screen name="saldo/top-up" options={{ headerShown: false }} />
+          <Stack.Screen name="saldo/confirm-top-up" options={{ headerShown: false }} />
           
         </Stack>
         <StatusBar style="auto" />

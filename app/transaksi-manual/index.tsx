@@ -293,7 +293,7 @@ export default function TransaksiManualScreen() {
             {/* Content */}
             <ScrollView 
                 style={styles.content}
-                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 60 }}
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 120 }}
             >
                 {/* Filter Section */}
                 <View style={styles.filterSection}>

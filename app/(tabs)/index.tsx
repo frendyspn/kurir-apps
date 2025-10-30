@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { BackHandler, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackHandler, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
 import OrderChart from '../../components/charts/order-chart';
@@ -277,7 +277,7 @@ function HomeScreen() {
                 {memoizedJenisOrderChart}
 
                 {/* Bottom Spacing for Tab Bar */}
-                <View style={{ height: Math.max(insets.bottom, 20) + 80 }} />
+                <View style={{ height: Platform.OS === 'android' ? Math.max(insets.bottom, 20) + 180 : Math.max(insets.bottom, 20) + 120 }} />
             </ScrollView>
         </View>
     );
