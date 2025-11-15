@@ -28,7 +28,7 @@ export default function Button({ title, loading, variant = 'primary', style, ...
             {...props}
         >
             {loading ? (
-                <ActivityIndicator color={variant === 'outline' ? '#0d6efd' : '#ffffff'} />
+                <ActivityIndicator color={variant === 'outline' ? '#0097A7' : '#ffffff'} />
             ) : (
                 <Text style={textStyles}>{title}</Text>
             )}
@@ -44,8 +44,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     primaryButton: {
-        backgroundColor: '#0d6efd',
-        shadowColor: '#0d6efd',
+        backgroundColor: '#0097A7',
+        shadowColor: '#0097A7',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 4,
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     outlineButton: {
         backgroundColor: 'transparent',
         borderWidth: 1,
-        borderColor: '#0d6efd',
+        borderColor: '#0097A7',
     },
     buttonText: {
         color: '#ffffff',
@@ -65,6 +65,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     outlineButtonText: {
-        color: '#0d6efd',
+        color: '#0097A7',
     },
 });

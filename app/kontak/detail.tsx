@@ -47,6 +47,11 @@ export default function DetailKontakScreen() {
     // Track if this is the first load
     const isFirstLoad = useRef(true);
 
+    // Handle update selected transaction
+    const handleUpdateSelectedTransaction = useCallback((updatedTransaction: any) => {
+        setSelectedTransaction(updatedTransaction);
+    }, []);
+
     const fetchTransactions = useCallback(async () => {
         if (!currentContactData?.id_konsumen) return;
         
@@ -148,7 +153,7 @@ export default function DetailKontakScreen() {
             console.error('Error fetching updated contact data:', error);
             // Don't show error to user, just keep existing data
         }
-    }, []); // Remove dependency to prevent infinite loops
+    }, [currentContactData]);
 
     // Refresh transactions when screen comes back into focus
     useFocusEffect(
@@ -308,7 +313,7 @@ export default function DetailKontakScreen() {
                                     handleEditKontak();
                                 }}
                             >
-                                <Ionicons name="create-outline" size={20} color="#0d6efd" />
+                                <Ionicons name="create-outline" size={20} color="#0097A7" />
                                 <Text style={styles.menuItemText}>Edit Kontak</Text>
                             </TouchableOpacity>
 
@@ -339,7 +344,7 @@ export default function DetailKontakScreen() {
                 {/* Contact Info */}
                 <View style={styles.infoCard}>
                     <View style={styles.infoRow}>
-                        <Ionicons name="call" size={20} color="#0d6efd" />
+                        <Ionicons name="call" size={20} color="#0097A7" />
                         <View style={styles.infoContent}>
                             <Text style={styles.infoLabel}>Telepon</Text>
                             <Text style={styles.infoValue}>{currentContactData.no_hp}</Text>
@@ -381,7 +386,7 @@ export default function DetailKontakScreen() {
                         
                         {loadingTransactions ? (
                             <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="small" color="#0d6efd" />
+                                <ActivityIndicator size="small" color="#0097A7" />
                                 <Text style={styles.loadingText}>Memuat transaksi...</Text>
                             </View>
                         ) : transactionsError ? (
@@ -449,6 +454,7 @@ export default function DetailKontakScreen() {
                         transaksi={selectedTransaction}
                         onClose={handleCloseDetailModal}
                         onRefresh={fetchTransactions}
+                        onUpdateTransaksi={handleUpdateSelectedTransaction}
                         showApproveSection={true}
                     />
                 )}
@@ -463,7 +469,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -507,7 +513,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     backButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 8,
@@ -595,7 +601,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     callButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
     },
     whatsappButton: {
         backgroundColor: '#25d366',
@@ -678,7 +684,7 @@ const styles = StyleSheet.create({
     transactionAmount: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     transactionStatus: {
         alignSelf: 'flex-start',

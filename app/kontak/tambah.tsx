@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
         textAlignVertical: 'top',
     },
     submitButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 12,
         paddingVertical: 16,
         alignItems: 'center',

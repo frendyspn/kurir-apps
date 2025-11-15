@@ -2,13 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { BackHandler, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, BackHandler, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
 import OrderChart from '../../components/charts/order-chart';
 import PendapatanChart from '../../components/charts/pendapatan-chart';
 import { APP_NAME } from '../../constant';
 import { apiService } from '../../services/api';
+import socketService from '../../services/socket';
+
 
 function HomeScreen() {
     const insets = useSafeAreaInsets();
@@ -16,6 +18,10 @@ function HomeScreen() {
     const [showSaldo, setShowSaldo] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [userData, setUserData] = useState<any>(null);
+    const [orders, setOrders] = useState<any[]>([]);
+    const [acceptedOrders, setAcceptedOrders] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedFilter, setSelectedFilter] = useState('semua');
 
     // Data grafik pendapatan per jam (TODO: Get from API)
     const [pendapatanData, setPendapatanData] = useState({
@@ -38,17 +44,26 @@ function HomeScreen() {
 
     // Fetch user data from AsyncStorage
     const fetchUserData = async () => {
-        const data = await AsyncStorage.getItem('userData');
-        if (data) {
-            const parsedData = JSON.parse(data);
-            setUserData(parsedData);
-            // Fetch balance after getting user data
-            await fetchBalance(parsedData.no_hp);
-            await fetchPendapatan(parsedData.no_hp);
+        try {
+            const data = await AsyncStorage.getItem('userData');
+            if (data) {
+                const parsedData = JSON.parse(data);
+                console.log('🔍 USER DATA FROM ASYNCSTORAGE:', parsedData);
+                console.log('🔍 USER ROLE:', parsedData.role);
+                console.log('🔍 USER AGEN:', parsedData.agen);
+                console.log('🔍 USER NO_HP:', parsedData.no_hp);
+                console.log('🔍 USER NAME:', parsedData.name);
+                setUserData(parsedData);
+                // Fetch balance after getting user data
+                await fetchBalance(parsedData.no_hp);
+                await fetchPendapatan(parsedData.no_hp);
+            } else {
+                console.log('❌ NO USER DATA FOUND IN ASYNCSTORAGE');
+            }
+        } catch (error) {
+            console.error('❌ Error fetching user data:', error);
         }
-    };
-
-    // Fetch balance from API
+    };    // Fetch balance from API
     const fetchBalance = async (phoneNumber: string) => {
         try {
             const response = await apiService.getBalance(phoneNumber);
@@ -60,15 +75,15 @@ function HomeScreen() {
         }
     };
 
-    const fetchPendapatan = async (phoneNumber: string) => {
+    const fetchPendapatan = async (phoneNumber: string, type?: string) => {
         const date = new Date();
         try {
-            const response = await apiService.getPendapatanDaily(phoneNumber, date.toLocaleDateString('sv-SE'));
+            const response = await apiService.getPendapatanDaily(phoneNumber, date.toLocaleDateString('sv-SE'), type);
             if (response.success && response.data) {
                 console.log(response.data?.data?.pendapatan);
                 setPendapatanData(response.data?.data?.pendapatan);
                 setOrderData(response.data?.data?.orders);
-                
+
                 // Set jenis order data from API
                 if (response.data?.data?.jenis_order) {
                     setJenisOrderData(response.data.data.jenis_order);
@@ -80,6 +95,209 @@ function HomeScreen() {
     };
 
     useEffect(() => {
+        initializeApp();
+    }, []);
+
+    const initializeApp = async () => {
+        try {
+            // Get user data
+            const user = await AsyncStorage.getItem('userData');
+            if (user) {
+                const parsedUser = JSON.parse(user);
+                setUserData(parsedUser);
+
+                // 🚫 DISABLE SOCKET - Comment out untuk testing
+                // // Set current user in socket service
+                // socketService.setCurrentUser(parsedUser);
+
+                // // Connect to Firebase
+                // await socketService.connect();
+                // console.log('🔥 Firebase connected in Order List');
+
+                // // Test Firebase connection
+                // console.log('🧪 Testing Firebase connection...');
+                // try {
+                //     // Simple test: try to read from a test path
+                //     const testRef = ref(database, 'test');
+                //     console.log('✅ Firebase database reference created successfully');
+                // } catch (testError) {
+                //     console.warn('⚠️ Firebase test failed:', testError);
+                // }
+
+                // Log user role for debugging
+                // console.log('👤 User role:', parsedUser.role);
+                // console.log('🏢 User agen:', parsedUser.agen);
+                // console.log('📱 User data:', parsedUser);
+
+                // Listen for new orders (khusus kurir)
+                // REMOVED: Listener moved to RealtimeOrderList component to avoid conflicts
+                // if (parsedUser.role === 'kurir') {
+                //     socketService.onNewOrders((newOrders) => {
+                //         console.log('📦 New orders received:', newOrders.length);
+                //         setOrders(newOrders);
+                //     });
+                // }
+            }
+        } catch (error) {
+            console.error('❌ Error initializing app:', error);
+            Alert.alert('Error', 'Gagal menginisialisasi aplikasi');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle order accepted
+    const handleOrderAccepted = useCallback((order: any) => {
+        console.log('✅ Order accepted:', order);
+        setAcceptedOrders(prev => [...prev, order]);
+        
+        // Navigate to order detail or show success message
+        Alert.alert(
+            'Order Diambil!',
+            `Order ${order.kode_order} berhasil diambil dan sedang diproses.`,
+            [
+                { text: 'Lihat Detail', onPress: () => {
+                    // TODO: Navigate to order detail screen
+                    console.log('Navigate to order detail:', order.id);
+                }},
+                { text: 'OK' }
+            ]
+        );
+    }, []);
+
+    // Toggle show/hide saldo
+    const handleToggleSaldo = useCallback(() => {
+        setShowSaldo(prev => !prev);
+    }, []);
+
+    // Test socket functionality - Update order status
+    const testUpdateOrderStatus = useCallback(async () => {
+        console.log('🔄 Testing Order Status Update...');
+        
+        try {
+            // Find the test order we created
+            const testOrderId = 'test_' + Date.now(); // This won't work, need to store the ID
+            
+            // For now, let's create and immediately update
+            const orderId = 'test_update_' + Date.now();
+            const orderData = {
+                id: orderId,
+                kode_order: 'UPDATE_TEST_' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+                status: 'SEARCH',
+                tarif: '15000',
+                alamat_jemput: 'Test Pickup',
+                alamat_antar: 'Test Delivery',
+                service: 'FOOD',
+                created_at: new Date().toISOString()
+            };
+            
+            // Create order
+            await socketService.createOrder(orderData);
+            console.log('📦 Test order created for update:', orderData.kode_order);
+            
+            // Wait 2 seconds then update status
+            setTimeout(async () => {
+                try {
+                    console.log('� Updating order status to PROCESS...');
+                    await socketService.updateOrderStatus(orderId, 'PROCESS', {
+                        id_sopir: '36',
+                        accepted_at: new Date().toISOString()
+                    });
+                    console.log('✅ Order status updated to PROCESS');
+                    
+                    // Wait another 2 seconds then complete
+                    setTimeout(async () => {
+                        console.log('✅ Completing order...');
+                        await socketService.updateOrderStatus(orderId, 'DELIVERED', {
+                            delivered_at: new Date().toISOString()
+                        });
+                        console.log('🎉 Order completed!');
+                    }, 2000);
+                    
+                } catch (updateError) {
+                    console.error('❌ Status update failed:', updateError);
+                }
+            }, 2000);
+            
+            Alert.alert('Status Update Test', 'Order akan diupdate otomatis dalam 2 detik!');
+            
+        } catch (error) {
+            console.error('❌ Status update test failed:', error);
+            Alert.alert('Test Failed', error instanceof Error ? error.message : 'Unknown error');
+        }
+    }, []);
+
+    // Test socket connection and create test order
+    const testSocketConnection = useCallback(async () => {
+        console.log('🔌 Testing Socket Connection...');
+        
+        try {
+            // Test 1: Check connection status
+            const isConnected = socketService.getConnectionStatus();
+            console.log('📡 Socket connection status:', isConnected ? '✅ Connected' : '❌ Disconnected');
+            
+            if (!isConnected) {
+                console.log('🔄 Attempting to reconnect...');
+                await socketService.connect();
+                console.log('✅ Reconnected successfully');
+            }
+            
+            // Test 2: Create a test order
+            const orderId = 'test_conn_' + Date.now();
+            const orderData = {
+                id: orderId,
+                kode_order: 'CONN_TEST_' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+                status: 'SEARCH',
+                tarif: '10000',
+                alamat_jemput: 'Test Connection Pickup',
+                alamat_antar: 'Test Connection Delivery',
+                service: 'FOOD',
+                created_at: new Date().toISOString()
+            };
+            
+            console.log('📦 Creating test order...');
+            await socketService.createOrder(orderData);
+            console.log('✅ Test order created successfully:', orderData.kode_order);
+            
+            // Test 3: Listen for the order in real-time (should appear in RealtimeOrderList)
+            console.log('👂 Listening for new orders...');
+            
+            Alert.alert(
+                'Socket Test Success!',
+                `✅ Connection: ${isConnected ? 'Connected' : 'Reconnected'}\n📦 Order Created: ${orderData.kode_order}\n👂 Listening for updates...`,
+                [{ text: 'OK' }]
+            );
+            
+        } catch (error) {
+            console.error('❌ Socket test failed:', error);
+            Alert.alert('Socket Test Failed', error instanceof Error ? error.message : 'Unknown error');
+        }
+    }, []);
+
+    // Update data based on selected filter
+    // MOVED TO handleFilterChange for immediate UI feedback
+
+    // Fetch user data on mount
+    // Initialize socket connection
+    const initializeSocket = async () => {
+        try {
+            console.log('🔌 Initializing socket connection...');
+            await socketService.connect();
+            console.log('✅ Socket connected successfully');
+            
+            // Test socket connection immediately
+            console.log('🧪 Testing socket connection...');
+            const testResult = socketService.getConnectionStatus();
+            console.log('🧪 Socket connection status:', testResult);
+            
+        } catch (error) {
+            console.error('❌ Socket connection failed:', error);
+            Alert.alert('Connection Error', 'Failed to connect to real-time service');
+        }
+    };
+
+    useEffect(() => {
+        initializeSocket();
         fetchUserData();
     }, []);
 
@@ -106,32 +324,47 @@ function HomeScreen() {
     // Handle pull to refresh
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        
+
         try {
             if (userData?.no_hp) {
                 // Fetch balance from API
                 await fetchBalance(userData.no_hp);
                 await fetchPendapatan(userData.no_hp);
-                
+
                 // TODO: Fetch other data from API
                 // await fetchPendapatanData();
                 // await fetchOrderData();
                 // await fetchJenisOrderData();
             }
-            
+
             console.log('Data refreshed');
         } catch (error) {
             console.error('Error refreshing data:', error);
-            
+
         } finally {
             setRefreshing(false);
         }
     }, [userData]);
 
-    // Toggle show/hide saldo
-    const handleToggleSaldo = useCallback(() => {
-        setShowSaldo(prev => !prev);
-    }, []);
+    // Handle filter change
+    const handleFilterChange = useCallback(async (filterId: string) => {
+        console.log(`Filter changed to: ${filterId}`);
+        setSelectedFilter(filterId);
+        
+        // Fetch data immediately for better UX
+        if (userData?.no_hp) {
+            if (filterId === 'live_order') {
+                console.log('Fetching live order data...');
+                await fetchPendapatan(userData.no_hp, 'live_order');
+            } else if (filterId === 'pasca_order') {
+                console.log('Fetching pasca order data...');
+                await fetchPendapatan(userData.no_hp, 'pasca_order');
+            } else {
+                console.log('Fetching all data...');
+                await fetchPendapatan(userData.no_hp, 'semua');
+            }
+        }
+    }, [userData?.no_hp]);
 
     // Menu items data
     const menuItems: any[] = [
@@ -144,7 +377,7 @@ function HomeScreen() {
     // Handle menu press
     const handleMenuPress = useCallback((item: any) => {
         console.log(`Menu pressed: ${item.name}`);
-        
+
         // Navigate based on menu id
         switch (item.id) {
             case 1:
@@ -164,18 +397,18 @@ function HomeScreen() {
 
     // Memoize charts untuk prevent re-render yang tidak perlu
     const memoizedPendapatanChart = useMemo(() => (
-        <PendapatanChart 
-            data={pendapatanData} 
-            mode="hourly" 
-            // date="2025-10-01" 
+        <PendapatanChart
+            data={pendapatanData}
+            mode="hourly"
+        // date="2025-10-01" 
         />
     ), [pendapatanData]);
 
     const memoizedOrderChart = useMemo(() => (
-        <OrderChart 
-            data={orderData} 
-            mode="hourly" 
-            // date="2025-10-01" 
+        <OrderChart
+            data={orderData}
+            mode="hourly"
+        // date="2025-10-01" 
         />
     ), [orderData]);
 
@@ -200,8 +433,8 @@ function HomeScreen() {
                     <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/akun')}>
                         <View style={styles.profileImage}>
                             {userData?.foto ? (
-                                <Image 
-                                    source={{ uri: userData.foto }} 
+                                <Image
+                                    source={{ uri: userData.foto }}
                                     style={styles.profileImageContent}
                                     resizeMode="cover"
                                 />
@@ -217,14 +450,14 @@ function HomeScreen() {
             </View>
 
             {/* Content with Pull to Refresh */}
-            <ScrollView 
+            <ScrollView
                 style={styles.content}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={['#0d6efd']} // Android
-                        tintColor="#0d6efd" // iOS
+                        colors={['#0097A7']} // Android
+                        tintColor="#0097A7" // iOS
                     />
                 }
             >
@@ -233,39 +466,196 @@ function HomeScreen() {
                     <View style={styles.saldoHeader}>
                         <Text style={styles.saldoLabel}>Saldo Anda</Text>
                         <TouchableOpacity onPress={handleToggleSaldo}>
-                            <Ionicons 
-                                name={showSaldo ? "eye-outline" : "eye-off-outline"} 
-                                size={20} 
-                                color="#6c757d" 
+                            <Ionicons
+                                name={showSaldo ? "eye-outline" : "eye-off-outline"}
+                                size={20}
+                                color="#6c757d"
                             />
                         </TouchableOpacity>
                     </View>
-                    
+
                     <Text style={styles.saldoAmount}>
                         {showSaldo ? formatCurrency(saldo) : 'Rp ******'}
                     </Text>
                 </View>
 
                 {/* Horizontal Menu */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.menuScroll}
-          contentContainerStyle={styles.menuContainer}
-        >
-          {menuItems.map((item) => (
-            <TouchableOpacity 
-              key={item.id} 
-              style={styles.menuItem}
-              onPress={() => handleMenuPress(item)}
-            >
-              <View style={styles.menuIconContainer}>
-                <Ionicons name={item.icon as any} size={28} color="#0d6efd" />
-              </View>
-              <Text style={styles.menuText}>{item.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>                
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.menuScroll}
+                    contentContainerStyle={styles.menuContainer}
+                >
+                    {menuItems.map((item) => (
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.menuItem}
+                            onPress={() => handleMenuPress(item)}
+                        >
+                            <View style={styles.menuIconContainer}>
+                                <Ionicons name={item.icon as any} size={28} color="#0097A7" />
+                            </View>
+                            <Text style={styles.menuText}>{item.name}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+
+                {/* Real-Time Order List - KHUSUS KURIR */}
+                {(__DEV__ || userData?.role === 'kurir') && (
+                    <>
+                        {console.log('🎯 RENDERING RealtimeOrderList - __DEV__:', __DEV__, 'userData.role:', userData?.role)}
+                        {/* <RealtimeOrderList 
+                            onOrderAccepted={handleOrderAccepted}
+                            maxHeight={300}
+                        /> */}
+                    </>
+                )}                {/* Debug Info */}
+                {__DEV__ && (
+                    <></>
+                    // <View style={[styles.saldoCard, { marginTop: 16 }]}>
+                    //     <Text style={styles.saldoLabel}>Debug Info:</Text>
+                    //     <Text>Role: {userData?.role || 'null'}</Text>
+                    //     <Text>Agen: {userData?.agen || 'null'}</Text>
+                    //     <Text>Name: {userData?.name || 'null'}</Text>
+                    //     <Text>RealtimeOrderList: {(userData?.role === 'kurir' || (__DEV__ && userData?.no_hp)) ? '✅ Rendered' : '❌ Not Rendered'}</Text>
+                    //     <Text>Condition: role==='kurir' OR (__DEV__ AND no_hp exists)</Text>
+                        
+                    //     <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    //         <TouchableOpacity
+                    //             style={[styles.menuItem, { backgroundColor: '#28a745', paddingHorizontal: 12, paddingVertical: 6 }]}
+                    //             onPress={() => {
+                    //                 // Force render RealtimeOrderList for testing
+                    //                 setUserData((prev: any) => ({ ...prev, role: 'kurir' }));
+                    //                 Alert.alert('Debug', 'RealtimeOrderList akan muncul');
+                    //             }}
+                    //         >
+                    //             <Text style={{ color: '#fff', fontSize: 12 }}>Force Show Orders</Text>
+                    //         </TouchableOpacity>
+                            
+                    //         <TouchableOpacity
+                    //             style={[styles.menuItem, { backgroundColor: '#17a2b8', paddingHorizontal: 12, paddingVertical: 6 }]}
+                    //             onPress={async () => {
+                    //                 // Test if socket listener is working
+                    //                 console.log('🧪 TESTING SOCKET LISTENER...');
+                    //                 try {
+                    //                     const testOrder = {
+                    //                         kode_order: 'TEST-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+                    //                         service: 'express',
+                    //                         tarif: Math.floor(Math.random() * 50000) + 15000, // Random tariff 15k-65k
+                    //                         titik_jemput: 'Test Pickup ' + Math.floor(Math.random() * 100),
+                    //                         alamat_jemput: 'Jl. Test Pickup No. ' + Math.floor(Math.random() * 100) + ', Jakarta',
+                    //                         titik_antar: 'Test Delivery ' + Math.floor(Math.random() * 100),
+                    //                         alamat_antar: 'Jl. Test Delivery No. ' + Math.floor(Math.random() * 100) + ', Jakarta',
+                    //                         time_remaining: 300,
+                    //                         created_at: new Date().toISOString()
+                    //                     };
+                                        
+                    //                     console.log('📤 SENDING TEST ORDER TO FIREBASE:', testOrder);
+                    //                     await socketService.createOrder(testOrder);
+                    //                     Alert.alert('Test', `Test order ${testOrder.kode_order} dikirim ke Firebase`);
+                    //                 } catch (error) {
+                    //                     console.error('❌ Error sending test order:', error);
+                    //                     Alert.alert('Error', 'Gagal mengirim test order: ' + (error as Error).message);
+                    //                 }
+                    //             }}
+                    //         >
+                    //             <Text style={{ color: '#fff', fontSize: 12 }}>Send Test Order</Text>
+                    //         </TouchableOpacity>
+                            
+                    //         <TouchableOpacity
+                    //             style={[styles.menuItem, { backgroundColor: '#ffc107', paddingHorizontal: 12, paddingVertical: 6 }]}
+                    //             onPress={testSocketConnection}
+                    //         >
+                    //             <Text style={{ color: '#000', fontSize: 12 }}>Test Socket</Text>
+                    //         </TouchableOpacity>
+                            
+                    //         <TouchableOpacity
+                    //             style={[styles.menuItem, { backgroundColor: '#dc3545', paddingHorizontal: 12, paddingVertical: 6 }]}
+                    //             onPress={() => {
+                    //                 // Reset role
+                    //                 setUserData((prev: any) => ({ ...prev, role: undefined }));
+                    //                 Alert.alert('Debug', 'RealtimeOrderList disembunyikan');
+                    //             }}
+                    //         >
+                    //             <Text style={{ color: '#fff', fontSize: 12 }}>Hide Orders</Text>
+                    //         </TouchableOpacity>
+                    //     </View>
+                    // </View>
+                )}
+
+                {/* MENU KHUSUS AGEN */}
+                {
+                    userData?.agen === '1' && (
+                        <View style={styles.saldoCard}>
+                            <View style={styles.saldoHeader}>
+                                <Text style={styles.saldoLabel}>Menu Khusus Agen</Text>
+                            </View>
+
+                            <View style={styles.menuRow}>
+                                <TouchableOpacity
+                                    style={styles.menuItem}
+                                    onPress={() => router.push('/live-order')}
+                                >
+                                    <View style={styles.menuIconContainer}>
+                                        <Ionicons name="flash-outline" size={28} color="#0097A7" />
+                                    </View>
+                                    <Text style={styles.menuText}>Live Order</Text>
+                                </TouchableOpacity>
+
+                                {/* <TouchableOpacity
+                                    style={styles.menuItem}
+                                    onPress={testSocketConnection}
+                                >
+                                    <View style={styles.menuIconContainer}>
+                                        <Ionicons name="wifi-outline" size={28} color="#28a745" />
+                                    </View>
+                                    <Text style={styles.menuText}>Test Socket</Text>
+                                </TouchableOpacity> */}
+
+                                {/* <TouchableOpacity
+                                    style={styles.menuItem}
+                                    onPress={testUpdateOrderStatus}
+                                >
+                                    <View style={styles.menuIconContainer}>
+                                        <Ionicons name="refresh-outline" size={28} color="#ffc107" />
+                                    </View>
+                                    <Text style={styles.menuText}>Test Update</Text>
+                                </TouchableOpacity> */}
+                            </View>
+                        </View>
+                    )
+                }
+
+                {/* Filter Pills */}
+                <View style={styles.filterContainer}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.filterScrollContent}
+                    >
+                        {[
+                            { id: 'semua', label: 'Semua' },
+                            { id: 'pasca_order', label: 'Pasca Order' },
+                            { id: 'live_order', label: 'Live Order' }
+                        ].map((pill) => (
+                            <TouchableOpacity
+                                key={pill.id}
+                                style={[
+                                    styles.filterPill,
+                                    selectedFilter === pill.id && styles.filterPillActive
+                                ]}
+                                onPress={() => handleFilterChange(pill.id)}
+                            >
+                                <Text style={[
+                                    styles.filterPillText,
+                                    selectedFilter === pill.id && styles.filterPillTextActive
+                                ]}>
+                                    {pill.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
 
                 {/* Grafik Pendapatan */}
                 {memoizedPendapatanChart}
@@ -289,7 +679,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -358,7 +748,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 4,
         borderWidth: 2,
-        borderColor: '#0d6efd',
+        borderColor: '#0097A7',
     },
     profileBadgeText: {
         color: '#ffffff',
@@ -399,6 +789,11 @@ const styles = StyleSheet.create({
         marginTop: 16,
         marginHorizontal: -16,
     },
+    menuRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        gap: 16,
+    },
     menuContainer: {
         paddingHorizontal: 0,
         paddingLeft: 16,
@@ -409,25 +804,54 @@ const styles = StyleSheet.create({
         width: 80,
     },
     menuIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#e7f1ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+        width: 54,
+        height: 54,
+        borderRadius: 32,
+        backgroundColor: '#e7f1ff',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
     menuText: {
-        fontSize: 12,
+        fontSize: 10,
         color: '#212529',
         textAlign: 'center',
         fontWeight: '500',
         lineHeight: 16,
+    },
+    filterContainer: {
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    filterScrollContent: {
+        paddingHorizontal: 16,
+        gap: 8,
+    },
+    filterPill: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#f8f9fa',
+        borderWidth: 1,
+        borderColor: '#dee2e6',
+    },
+    filterPillActive: {
+        backgroundColor: '#0097A7',
+        borderColor: '#0097A7',
+    },
+    filterPillText: {
+        fontSize: 14,
+        color: '#6c757d',
+        fontWeight: '500',
+    },
+    filterPillTextActive: {
+        color: '#ffffff',
+        fontWeight: '600',
     },
 });
 

@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
     },
     inputFilled: {
-        borderColor: '#0d6efd',
+        borderColor: '#0097A7',
         backgroundColor: '#f8f9fa',
     },
     inputError: {

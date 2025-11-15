@@ -9,7 +9,9 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kitabuatin.mitraklikquick",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +22,7 @@
       },
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.mitraklikquick"
+      "package": "com.kitabuatin.mitraklikquick"
     },
     "web": {
       "output": "static",
@@ -34,12 +36,19 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#0097A7",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#0097A7"
           }
         }
-      ]
+      ],
+      [
+        "@react-native-firebase/app",
+        {
+          "projectId": "satukurirwebpush"
+        }
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

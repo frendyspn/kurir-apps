@@ -144,7 +144,7 @@ export default function KontakScreen() {
                     onPress={() => router.push('/kontak/tambah')}
                     style={styles.addButton}
                 >
-                    <Ionicons name="add" size={20} color="#0d6efd" />
+                    <Ionicons name="add" size={20} color="#0097A7" />
                 </TouchableOpacity>
             </View>
 
@@ -189,8 +189,8 @@ export default function KontakScreen() {
                             <RefreshControl
                                 refreshing={refreshing}
                                 onRefresh={onRefresh}
-                                colors={['#0d6efd']}
-                                tintColor="#0d6efd"
+                                colors={['#0097A7']}
+                                tintColor="#0097A7"
                             />
                         }
                     />
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
     },
     contactPhone: {
         fontSize: 14,
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '500',
         marginBottom: 2,
     },

@@ -70,10 +70,12 @@ export default function TambahTransaksiScreen() {
                 console.error('No user data found');
                 return;
             }
+            
 
             const user = JSON.parse(userData);
             const response = await apiService.getListAgent(user.no_hp);
-            
+
+
             if (response.success && response.data && response.data.data) {
                 const agentData = response.data.data;
                 
@@ -276,7 +278,7 @@ export default function TambahTransaksiScreen() {
                 contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 120 }}
             >
                 <View style={styles.formSection}>
-                    <Text style={styles.sectionTitle}>Form Transaksi Manual</Text>
+                    <Text style={styles.sectionTitle}>Form Pasca Order</Text>
                     
                     {/* Tanggal */}
                     <DatePickerInput
@@ -289,7 +291,7 @@ export default function TambahTransaksiScreen() {
                     {/* Agen Kurir */}
                     {loadingAgen ? (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="small" color="#0d6efd" />
+                            <ActivityIndicator size="small" color="#0097A7" />
                             <Text style={styles.loadingText}>Memuat agen...</Text>
                         </View>
                     ) : (
@@ -307,7 +309,7 @@ export default function TambahTransaksiScreen() {
                         <View style={styles.inputContainer}>
                             <Text style={styles.inputLabel}>Pelanggan</Text>
                             <View style={styles.selectedCustomerContainer}>
-                                <Ionicons name="person" size={20} color="#0d6efd" />
+                                <Ionicons name="person" size={20} color="#0097A7" />
                                 <View style={styles.selectedCustomerInfo}>
                                     <Text style={styles.selectedCustomerName}>{pelangganLabel}</Text>
                                     <Text style={styles.selectedCustomerNote}>Pelanggan sudah dipilih</Text>
@@ -334,7 +336,7 @@ export default function TambahTransaksiScreen() {
                         <Text style={styles.inputLabel}>Layanan *</Text>
                         {loadingLayanan ? (
                             <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="small" color="#0d6efd" />
+                                <ActivityIndicator size="small" color="#0097A7" />
                                 <Text style={styles.loadingText}>Memuat layanan...</Text>
                             </View>
                         ) : (
@@ -358,7 +360,7 @@ export default function TambahTransaksiScreen() {
                                                 'ellipse'
                                             } 
                                             size={24} 
-                                            color={layanan === option.value ? '#ffffff' : '#0d6efd'} 
+                                            color={layanan === option.value ? '#ffffff' : '#0097A7'} 
                                         />
                                         <Text style={[
                                             styles.layananButtonText,
@@ -467,7 +469,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -592,7 +594,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#ffffff',
         borderRadius: 10,
         borderWidth: 2,
-        borderColor: '#0d6efd',
+        borderColor: '#0097A7',
         paddingVertical: 14,
         paddingHorizontal: 12,
         gap: 8,
@@ -603,13 +605,13 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     layananButtonActive: {
-        backgroundColor: '#0d6efd',
-        borderColor: '#0d6efd',
+        backgroundColor: '#0097A7',
+        borderColor: '#0097A7',
     },
     layananButtonText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     layananButtonTextActive: {
         color: '#ffffff',
@@ -618,7 +620,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 12,
         paddingVertical: 16,
         paddingHorizontal: 24,
@@ -644,7 +646,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#e7f3ff',
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#0d6efd',
+        borderColor: '#0097A7',
         paddingHorizontal: 12,
         paddingVertical: 12,
         gap: 12,
@@ -659,7 +661,7 @@ const styles = StyleSheet.create({
     },
     selectedCustomerNote: {
         fontSize: 12,
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '500',
     },
 });

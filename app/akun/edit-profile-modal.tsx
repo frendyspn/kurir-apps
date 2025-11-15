@@ -147,7 +147,7 @@ export default function EditProfileModal({ visible, onClose, userData, onSave }:
                     <View style={styles.header}>
                         <Text style={styles.title}>Update Profile</Text>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                            <Ionicons name="close" size={24} color="#0d6efd" />
+                            <Ionicons name="close" size={24} color="#0097A7" />
                         </TouchableOpacity>
                     </View>
                     <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingBottom: 16 }}>
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     closeButton: {
         padding: 4,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     saveButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: 'center',

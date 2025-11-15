@@ -429,7 +429,7 @@ export default function RegisterDetailScreen() {
                             {/* Provinsi */}
                             {loadingProvinsi ? (
                                 <View style={styles.loadingField}>
-                                    <ActivityIndicator size="small" color="#0d6efd" />
+                                    <ActivityIndicator size="small" color="#0097A7" />
                                     <Text style={styles.loadingFieldText}>Memuat provinsi...</Text>
                                 </View>
                             ) : (
@@ -447,7 +447,7 @@ export default function RegisterDetailScreen() {
                             {/* Kota/Kabupaten */}
                             {loadingKota ? (
                                 <View style={styles.loadingField}>
-                                    <ActivityIndicator size="small" color="#0d6efd" />
+                                    <ActivityIndicator size="small" color="#0097A7" />
                                     <Text style={styles.loadingFieldText}>Memuat kota...</Text>
                                 </View>
                             ) : (
@@ -466,7 +466,7 @@ export default function RegisterDetailScreen() {
                             {/* Kecamatan */}
                             {loadingKecamatan ? (
                                 <View style={styles.loadingField}>
-                                    <ActivityIndicator size="small" color="#0d6efd" />
+                                    <ActivityIndicator size="small" color="#0097A7" />
                                     <Text style={styles.loadingFieldText}>Memuat kecamatan...</Text>
                                 </View>
                             ) : (
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
         marginTop: 12,
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,

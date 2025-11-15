@@ -82,7 +82,7 @@ export default function ConfirmTopUpScreen() {
                             text: 'OK',
                             onPress: () => {
                                 // Navigate back to saldo screen
-                                router.replace('/saldo');
+                                router.replace('/(tabs)/saldo');
                             },
                         },
                     ]
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 16,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -287,12 +287,12 @@ const styles = StyleSheet.create({
     instructionTitle: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
         marginBottom: 12,
     },
     instructionText: {
         fontSize: 14,
-        color: '#0d6efd',
+        color: '#0097A7',
         lineHeight: 20,
     },
     uploadSection: {
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     },
     changeImageText: {
         fontSize: 14,
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '500',
     },
     submitContainer: {
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
         borderTopColor: '#dee2e6',
     },
     submitButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',

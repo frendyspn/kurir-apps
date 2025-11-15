@@ -69,7 +69,7 @@ export default function ProfileModal({ visible, onClose, onSave }: { visible: bo
                         <View style={styles.header}>
                             <Text style={styles.title}>Data Profile</Text>
                             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color="#0d6efd" />
+                                <Ionicons name="close" size={24} color="#0097A7" />
                             </TouchableOpacity>
                         </View>
 
@@ -96,7 +96,7 @@ export default function ProfileModal({ visible, onClose, onSave }: { visible: bo
                                     setTimeout(() => setShowPhotoModal(true), 300);
                                 }}
                             >
-                                <Ionicons name="camera" size={20} color="#0d6efd" />
+                                <Ionicons name="camera" size={20} color="#0097A7" />
                                 <Text style={styles.photoUploadText}>Update Foto Profile</Text>
                             </TouchableOpacity>
                         </View>
@@ -142,7 +142,7 @@ export default function ProfileModal({ visible, onClose, onSave }: { visible: bo
 
 const styles = StyleSheet.create({
     editButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 8,
         paddingVertical: 10,
         alignItems: 'center',
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     closeButton: {
         padding: 4,
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     photoUploadText: {
-        color: '#0d6efd',
+        color: '#0097A7',
         fontSize: 14,
         fontWeight: 'bold',
     },

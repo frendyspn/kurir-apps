@@ -14,6 +14,8 @@ const generateToken = () => {
 };
 
 export const API_BASE_URL = 'https://api.satutoko.my.id/api';
+export const BROADCAST_URL = 'http://api.satutoko.my.id:6001';
+export const SOCKET_URL = 'http://api.satutoko.my.id:6001';
 export const API_TOKEN = generateToken();
 export const APP_NAME = 'Mitra KlikQuick';
 
@@ -48,4 +50,27 @@ export const API_ENDPOINTS = {
     GET_TOP_UP_METHODS: `${API_BASE_URL}/v1/get_top_up_methods`,
     CREATE_TOP_UP_REQUEST: `${API_BASE_URL}/v1/create_top_up_request`,
     UPLOAD_TOP_UP_PROOF: `${API_BASE_URL}/v1/upload_top_up_proof`,
+    CREATE_WITHDRAW_REQUEST: `${API_BASE_URL}/v1/create_withdraw_request`,
+    GET_BANK_LIST: `${API_BASE_URL}/v1/get_bank_list`,
+    CREATE_TRANSFER_REQUEST: `${API_BASE_URL}/kurir/v1/create_transfer_request`,
+    CHECK_USER_BY_PHONE: `${API_BASE_URL}/kurir/v1/check_user_by_phone`,
+
+    // Kurir Orders
+    GET_AVAILABLE_KURIR_ORDERS: `${API_BASE_URL}/kurir/v1/kurir-orders/available`,
+    ACCEPT_KURIR_ORDER: `${API_BASE_URL}/kurir/v1/kurir-orders`,
+    CREATE_KURIR_ORDER: `${API_BASE_URL}/kurir/v1/kurir-orders`,
+    GET_MY_KURIR_ORDERS: `${API_BASE_URL}/kurir/v1/kurir-orders/my-orders`,
+    UPDATE_KURIR_ORDER_STATUS: `${API_BASE_URL}/kurir/v1/kurir-orders`,
+
+    // Live Order
+    LIST_LIVE_ORDER: `${API_BASE_URL}/kurir/v1/live-order`,
+    CREATE_LIVE_ORDER: `${API_BASE_URL}/kurir/v1/live-order/create`,
+    UPDATE_LIVE_ORDER: `${API_BASE_URL}/kurir/v1/live-order/update`,
+    GET_DETAIL_PENJUALAN: `${API_BASE_URL}/kurir/v1/live-order/detail-penjualan`,
+    GET_KOMISI: `${API_BASE_URL}/kurir/v1/komisi`,
+    GET_ADMIN_KURIR: `${API_BASE_URL}/kurir/v1/admin-kurir`,
+    AMBIL_ORDER: `${API_BASE_URL}/kurir/v1/live-order/ambil`,
+    PICKUP_ORDER: `${API_BASE_URL}/kurir/v1/live-order/pickup`,
+    COMPLETE_ORDER: `${API_BASE_URL}/kurir/v1/live-order/complete`,
+    SOCKET_URL: SOCKET_URL,
 };

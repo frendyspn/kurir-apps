@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     backButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 8,
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 12,
         paddingVertical: 16,
         paddingHorizontal: 24,

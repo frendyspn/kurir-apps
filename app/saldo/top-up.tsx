@@ -104,8 +104,9 @@ export default function TopUpScreen() {
                 amount: amount,
                 bank_id: selectedBank.id_rekening,
             });
+            console.log('Top up request response:', response);
 
-            if (response.success && response.data) {
+            if (response.data?.success) {
                 // Navigate to confirm screen with top up data
                 router.push({
                     pathname: '/saldo/confirm-top-up',
@@ -118,7 +119,7 @@ export default function TopUpScreen() {
                     },
                 });
             } else {
-                Alert.alert('Error', response.message || 'Gagal membuat request top up');
+                Alert.alert('Error', response.data?.message || 'Gagal membuat request top up');
             }
         } catch (error) {
             console.error('Error creating top up request:', error);
@@ -144,7 +145,7 @@ export default function TopUpScreen() {
                 </Text>
             </View>
             {selectedBank?.id_rekening === item.id_rekening && (
-                <Ionicons name="checkmark-circle" size={24} color="#0d6efd" />
+                <Ionicons name="checkmark-circle" size={24} color="#0097A7" />
             )}
         </TouchableOpacity>
     ), [selectedBank, handleBankSelect]);
@@ -192,7 +193,7 @@ export default function TopUpScreen() {
 
                     {loading ? (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#0d6efd" />
+                            <ActivityIndicator size="large" color="#0097A7" />
                             <Text style={styles.loadingText}>Memuat metode pembayaran...</Text>
                         </View>
                     ) : (
@@ -242,7 +243,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 16,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -318,7 +319,7 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     selectedBankMethod: {
-        borderColor: '#0d6efd',
+        borderColor: '#0097A7',
         borderWidth: 2,
     },
     bankMethodInfo: {
@@ -360,7 +361,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#ffffff',
     },
     submitButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',

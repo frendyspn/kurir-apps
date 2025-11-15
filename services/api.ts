@@ -135,11 +135,16 @@ class ApiService {
     }
 
 
-    async getPendapatanDaily(phoneNumber: string, date?: string): Promise<ApiResponse> {
-        console.log('getPendapatanDaily called with date:', date);
+    async getPendapatanDaily(phoneNumber: string, date?: string, type?: string): Promise<ApiResponse> {
+        console.log('getPendapatanDaily called with date:', type);
         const formData = new FormData();
         formData.append('no_hp', phoneNumber);
         formData.append('date', date || new Date().toISOString().split('T')[0]);
+        if (type) {
+            formData.append('type', type);
+        } else {
+            formData.append('type', 'all');
+        }
 
         return this.request(API_ENDPOINTS.ORDER_DAILY, {
             method: 'POST',
@@ -147,13 +152,19 @@ class ApiService {
         });
     }
 
-    async getPendapatanMonthly(phoneNumber: string, year?: string, month?: string): Promise<ApiResponse> {
+    async getPendapatanMonthly(phoneNumber: string, year?: string, month?: string, type?: string): Promise<ApiResponse> {
+        console.log(type)
         const formData = new FormData();
         const today = new Date();
 
         formData.append('no_hp', phoneNumber);
         formData.append('year', year || today.getFullYear().toString());
         formData.append('month', month || (today.getMonth() + 1).toString().padStart(2, '0'));
+        if (type) {
+            formData.append('type', type);
+        } else {
+            formData.append('type', 'all');
+        }
 
         return this.request(API_ENDPOINTS.ORDER_MONTHLY, {
             method: 'POST',
@@ -688,13 +699,346 @@ class ApiService {
                 type: `image/${fileType}`,
             } as any);
         }
-
+        console.log(JSON.stringify(formData))
         return this.request(API_ENDPOINTS.UPLOAD_TOP_UP_PROOF, {
             method: 'POST',
             body: formData,
         });
     }
 
+    // Create Withdraw Request
+    async createWithdrawRequest(data: {
+        no_hp: string;
+        amount: string;
+        bank_name: string;
+        account_name: string;
+        account_number: string;
+        bank_id?: string | null;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', data.no_hp);
+        formData.append('amount', data.amount);
+        formData.append('bank_name', data.bank_name);
+        formData.append('account_name', data.account_name);
+        formData.append('account_number', data.account_number);
+        
+        if (data.bank_id) {
+            formData.append('bank_id', data.bank_id);
+        }
+
+        return this.request(API_ENDPOINTS.CREATE_WITHDRAW_REQUEST, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Get Bank List
+    async getBankList(): Promise<ApiResponse> {
+        return this.request(API_ENDPOINTS.GET_BANK_LIST, {
+            method: 'GET',
+        });
+    }
+
+    // Create Transfer Request
+    async createTransferRequest(data: {
+        no_hp_sender: string;
+        no_hp_receiver: string;
+        amount: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp_sender', data.no_hp_sender);
+        formData.append('no_hp_receiver', data.no_hp_receiver);
+        formData.append('amount', data.amount);
+
+        return this.request(API_ENDPOINTS.CREATE_TRANSFER_REQUEST, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Check User by Phone Number
+    async checkUserByPhone(phoneNumber: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', phoneNumber);
+
+        return this.request(API_ENDPOINTS.CHECK_USER_BY_PHONE, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+
+    async getAvailableKurirOrders(): Promise<ApiResponse> {
+        return this.request(API_ENDPOINTS.GET_AVAILABLE_KURIR_ORDERS);
+    }
+
+    async acceptKurirOrder(orderId: number, kurirId: number): Promise<ApiResponse> {
+        return this.request(`${API_ENDPOINTS.ACCEPT_KURIR_ORDER}/${orderId}/accept`, {
+            method: 'POST',
+            body: JSON.stringify({ kurir_id: kurirId }),
+        });
+    }
+
+    async createKurirOrder(orderData: any): Promise<ApiResponse> {
+        return this.request(API_ENDPOINTS.CREATE_KURIR_ORDER, {
+            method: 'POST',
+            body: JSON.stringify(orderData),
+        });
+    }
+
+    async getMyKurirOrders(): Promise<ApiResponse> {
+        return this.request(API_ENDPOINTS.GET_MY_KURIR_ORDERS);
+    }
+
+    async updateKurirOrderStatus(orderId: number, statusData: any): Promise<ApiResponse> {
+        return this.request(`${API_ENDPOINTS.UPDATE_KURIR_ORDER_STATUS}/${orderId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify(statusData),
+        });
+    }
+
+
+    // Create Live Order
+    async createLiveOrder(data: {
+        no_hp_pelanggan: string;
+        no_hp_pelanggan_baru?: string;
+        nama_pelanggan?: string;
+        nama_layanan: string;
+        alamat_penjemputan: string;
+        alamat_tujuan: string;
+        biaya_antar: string;
+        nama_toko?: string;
+        agen_kurir: string;
+        tanggal_order: string;
+        btn_simpan: string;
+        no_hp: string;
+        produk?: Array<{
+            nama_barang: string;
+            qty: string;
+            satuan: string;
+            harga: string;
+        }>;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('no_hp_pelanggan', data.no_hp_pelanggan);
+        if (data.no_hp_pelanggan_baru) {
+            formData.append('no_hp_pelanggan_baru', data.no_hp_pelanggan_baru);
+        }
+        if (data.nama_pelanggan) {
+            formData.append('nama_pelanggan', data.nama_pelanggan);
+        }
+        formData.append('nama_layanan', data.nama_layanan);
+        formData.append('alamat_penjemputan', data.alamat_penjemputan);
+        formData.append('alamat_tujuan', data.alamat_tujuan);
+        formData.append('biaya_antar', data.biaya_antar);
+        if (data.nama_toko) {
+            formData.append('nama_toko', data.nama_toko);
+        }
+        formData.append('agen_kurir', data.agen_kurir);
+        formData.append('tanggal_order', data.tanggal_order);
+        formData.append('btn_simpan', data.btn_simpan);
+        formData.append('no_hp', data.no_hp);
+
+        // Add produk data for FOOD/SHOP services
+        if (data.produk && data.produk.length > 0) {
+            // Convert produk array to JSON string
+            formData.append('produk', JSON.stringify(data.produk));
+        }
+
+        return this.request(API_ENDPOINTS.CREATE_LIVE_ORDER, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    async getListLiveOrder(
+        phoneNumber: string,
+        startDate: string,
+        endDate: string,
+        idKonsumen?: string,
+        serviceType?: string,
+        searchQuery?: string
+    ): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', phoneNumber);
+        formData.append('start_date', startDate);
+        formData.append('end_date', endDate);
+
+        if (idKonsumen) {
+            formData.append('id_konsumen', idKonsumen);
+        }
+
+        if (serviceType) {
+            formData.append('service_type', serviceType);
+        }
+
+        if (searchQuery) {
+            formData.append('search', searchQuery);
+        }
+
+        return this.request(API_ENDPOINTS.LIST_LIVE_ORDER, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Ambil Order (for Kurir)
+    async ambilOrder(data: {
+        id_transaksi: string;
+        btn_simpan: string;
+        no_hp: string;
+        id_sopir: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('id_transaksi', data.id_transaksi);
+        formData.append('btn_simpan', data.btn_simpan);
+        formData.append('no_hp', data.no_hp);
+        formData.append('id_sopir', data.id_sopir);
+
+        return this.request(API_ENDPOINTS.AMBIL_ORDER, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Pickup Order (for Kurir)
+    async pickupOrder(data: {
+        id_transaksi: string;
+        btn_simpan: string;
+        no_hp: string;
+        id_sopir: string;
+        customer_ready?: boolean; // For RIDE service
+        foto_pickup_uri?: string; // For FOOD/SHOP/SEND services
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('id_transaksi', data.id_transaksi);
+        formData.append('btn_simpan', data.btn_simpan);
+        formData.append('no_hp', data.no_hp);
+        formData.append('id_sopir', data.id_sopir);
+
+        // Add customer ready status for RIDE service
+        if (data.customer_ready !== undefined) {
+            formData.append('customer_ready', data.customer_ready ? '1' : '0');
+        }
+
+        // Add pickup photo for FOOD/SHOP/SEND services
+        if (data.foto_pickup_uri && data.foto_pickup_uri.trim() !== '') {
+            const uriParts = data.foto_pickup_uri.split('.');
+            const fileType = uriParts[uriParts.length - 1];
+            
+            formData.append('foto_pickup', {
+                uri: data.foto_pickup_uri,
+                name: `pickup_${data.id_transaksi}_${Date.now()}.${fileType}`,
+                type: `image/${fileType}`,
+            } as any);
+        }
+
+        return this.request(API_ENDPOINTS.PICKUP_ORDER, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Complete Order (for Kurir)
+    async completeOrder(data: {
+        id_transaksi: string;
+        btn_simpan: string;
+        no_hp: string;
+        id_sopir: string;
+        customer_received?: boolean; // For RIDE service
+        foto_complete_uri?: string; // For FOOD/SHOP/SEND services
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('id_transaksi', data.id_transaksi);
+        formData.append('btn_simpan', data.btn_simpan);
+        formData.append('no_hp', data.no_hp);
+        formData.append('id_sopir', data.id_sopir);
+
+        // Add customer received status for RIDE service
+        if (data.customer_received !== undefined) {
+            formData.append('customer_received', data.customer_received ? '1' : '0');
+        }
+
+        // Add complete photo for FOOD/SHOP/SEND services
+        if (data.foto_complete_uri && data.foto_complete_uri.trim() !== '') {
+            const uriParts = data.foto_complete_uri.split('.');
+            const fileType = uriParts[uriParts.length - 1];
+            
+            formData.append('foto_complete', {
+                uri: data.foto_complete_uri,
+                name: `complete_${data.id_transaksi}_${Date.now()}.${fileType}`,
+                type: `image/${fileType}`,
+            } as any);
+        }
+
+        return this.request(API_ENDPOINTS.COMPLETE_ORDER, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Update Live Order
+    async updateLiveOrder(orderId: string, data: any): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        // Add order ID
+        formData.append('id', orderId);
+
+        // Add all data fields
+        Object.keys(data).forEach(key => {
+            if (data[key] !== null && data[key] !== undefined) {
+                // Special handling for produk array - convert to JSON string
+                if (key === 'produk' && Array.isArray(data[key])) {
+                    formData.append(key, JSON.stringify(data[key]));
+                } else {
+                    formData.append(key, data[key].toString());
+                }
+            }
+        });
+        console.log('Updating Live Order with data:', formData);
+
+        return this.request(API_ENDPOINTS.UPDATE_LIVE_ORDER, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Get Detail Penjualan (untuk mendapatkan produk dari live order)
+    async getDetailPenjualan(idPenjualan: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('id_penjualan', idPenjualan);
+
+        return this.request(API_ENDPOINTS.GET_DETAIL_PENJUALAN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Get Komisi data untuk transaksi yang sudah FINISH
+    async getKomisi(idTransaksi: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('id_transaksi', idTransaksi);
+
+        return this.request(API_ENDPOINTS.GET_KOMISI, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Get Potongan Admin data untuk transaksi yang sudah FINISH
+    async getAdminKurir(idTransaksi: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('id_transaksi', idTransaksi);
+
+        return this.request(API_ENDPOINTS.GET_ADMIN_KURIR, {
+            method: 'POST',
+            body: formData,
+        });
+    }
 }
 
 export const apiService = new ApiService();

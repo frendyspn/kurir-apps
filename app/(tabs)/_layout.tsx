@@ -15,7 +15,7 @@ export default function TabLayout() {
         <SafeAreaView style={{ flex: 1, backgroundColor: '#ffffff' }} edges={['left', 'right']}>
             <Tabs
                 screenOptions={{
-                    tabBarActiveTintColor: '#0d6efd',
+                    tabBarActiveTintColor: '#0097A7',
                     tabBarInactiveTintColor: '#8e8e93',
                     headerShown: false,
                     tabBarButton: HapticTab,
@@ -63,6 +63,7 @@ export default function TabLayout() {
                     options={{
                         title: 'Saldo',
                         tabBarIcon: ({ color }) => <Ionicons name="wallet" size={24} color={color} />,
+                        headerShown: false,
                     }}
                 />
                 

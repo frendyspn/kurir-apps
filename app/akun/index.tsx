@@ -95,7 +95,7 @@ function AkunScreen() {
                                 resizeMode="cover"
                             />
                         ) : (
-                            <Ionicons name="person" size={40} color="#0d6efd" />
+                            <Ionicons name="person" size={40} color="#0097A7" />
                         )}
                     </View>
                     <View style={styles.userInfo}>
@@ -118,7 +118,7 @@ function AkunScreen() {
                             onPress={() => handleMenuPress(item)}
                         >
                             <View style={styles.menuIconContainer}>
-                                <Ionicons name={item.icon as any} size={24} color="#0d6efd" />
+                                <Ionicons name={item.icon as any} size={24} color="#0097A7" />
                             </View>
                             <Text style={styles.menuText}>{item.name}</Text>
                             <Ionicons name="chevron-forward" size={20} color="#6c757d" />
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,

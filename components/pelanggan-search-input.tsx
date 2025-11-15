@@ -142,7 +142,7 @@ export default function PelangganSearchInput({
                                 if (isSearching) {
                                     return (
                                         <View style={styles.loadingContainer}>
-                                            <ActivityIndicator size="large" color="#0d6efd" />
+                                            <ActivityIndicator size="large" color="#0097A7" />
                                             <Text style={styles.loadingText}>Mencari pelanggan...</Text>
                                         </View>
                                     );
@@ -177,7 +177,7 @@ export default function PelangganSearchInput({
                                                         <Ionicons 
                                                             name="person-circle-outline" 
                                                             size={24} 
-                                                            color={value === option.value ? '#0d6efd' : '#6c757d'} 
+                                                            color={value === option.value ? '#0097A7' : '#6c757d'} 
                                                         />
                                                         <Text
                                                             style={[
@@ -189,7 +189,7 @@ export default function PelangganSearchInput({
                                                         </Text>
                                                     </View>
                                                     {value === option.value && (
-                                                        <Ionicons name="checkmark-circle" size={24} color="#0d6efd" />
+                                                        <Ionicons name="checkmark-circle" size={24} color="#0097A7" />
                                                     )}
                                                 </TouchableOpacity>
                                             ))}
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 8,
         paddingVertical: 12,
         paddingHorizontal: 16,
@@ -373,6 +373,6 @@ const styles = StyleSheet.create({
     },
     selectedOptionText: {
         fontWeight: '600',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
 });

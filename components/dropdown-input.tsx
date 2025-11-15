@@ -122,7 +122,7 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                                                 {option.label}
                                             </Text>
                                             {value === option.value && (
-                                                <Ionicons name="checkmark" size={20} color="#0d6efd" />
+                                                <Ionicons name="checkmark" size={20} color="#0097A7" />
                                             )}
                                         </TouchableOpacity>
                                     ))}
@@ -150,7 +150,7 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                                                 {option.label}
                                             </Text>
                                             {value === option.value && (
-                                                <Ionicons name="checkmark" size={20} color="#0d6efd" />
+                                                <Ionicons name="checkmark" size={20} color="#0097A7" />
                                             )}
                                         </TouchableOpacity>
                                     ))}
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
         color: '#212529',
     },
     optionTextSelected: {
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '600',
     },
 });

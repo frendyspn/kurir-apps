@@ -130,7 +130,7 @@ export default function EditKendaraanModal({ visible, onClose, kendaraanData, on
                         <View style={styles.header}>
                             <Text style={styles.title}>Edit Kendaraan</Text>
                             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color="#0d6efd" />
+                                <Ionicons name="close" size={24} color="#0097A7" />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.uploadSection}>
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     closeButton: {
         padding: 4,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     saveButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: 'center',
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     uploadButtonText: {
-        color: '#0d6efd',
+        color: '#0097A7',
         fontSize: 14,
         fontWeight: 'bold',
     },

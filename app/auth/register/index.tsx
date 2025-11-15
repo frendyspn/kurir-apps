@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
         marginBottom: 12,
         textAlign: 'center',
     },
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
         lineHeight: 18,
     },
     link: {
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '600',
     },
 });

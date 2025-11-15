@@ -423,7 +423,7 @@ export default function KelengkapanDataScreen() {
                     headerStyle: {
                         backgroundColor: '#ffffff',
                     },
-                    headerTintColor: '#0d6efd',
+                    headerTintColor: '#0097A7',
                     headerTitleStyle: {
                         fontWeight: 'bold',
                         fontSize: 18,
@@ -443,8 +443,8 @@ export default function KelengkapanDataScreen() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={['#0d6efd']}
-                        tintColor="#0d6efd"
+                        colors={['#0097A7']}
+                        tintColor="#0097A7"
                     />
                 }
             >
@@ -723,7 +723,7 @@ const styles = StyleSheet.create({
     },
     changeImageText: {
         fontSize: 14,
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '600',
     },
     errorText: {

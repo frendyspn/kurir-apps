@@ -5,9 +5,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
 import OrderChart from '../../components/charts/order-chart';
 import PendapatanChart from '../../components/charts/pendapatan-chart';
+import TransactionList from '../../components/transaction-list';
 import { apiService } from '../../services/api';
 
 type PeriodeType = 'harian' | 'bulanan';
+type OrderType = 'semua' | 'pasca_order' | 'live_order';
+type ReportType = 'chart' | 'list';
 
 function HistoryScreen() {
     const insets = useSafeAreaInsets();
@@ -15,6 +18,8 @@ function HistoryScreen() {
     const [loading, setLoading] = useState(false);
     const [userData, setUserData] = useState<any>(null);
     const [periode, setPeriode] = useState<PeriodeType>('harian');
+    const [type, setType] = useState<OrderType>('semua');
+    const [reportType, setReportType] = useState<ReportType>('chart');
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [selectedMonth, setSelectedMonth] = useState<string>('');
 
@@ -37,6 +42,9 @@ function HistoryScreen() {
     // Data grafik pie jenis order
     const [jenisOrderData, setJenisOrderData] = useState([]);
 
+    // Data list transaksi untuk tampilan list
+    const [transactionList, setTransactionList] = useState<any[]>([]);
+
     // Fetch user data from AsyncStorage
     const fetchUserData = async () => {
         const data = await AsyncStorage.getItem('userData');
@@ -44,12 +52,12 @@ function HistoryScreen() {
             const parsedData = JSON.parse(data);
             setUserData(parsedData);
             // Fetch balance after getting user data
-            await fetchPendapatan(parsedData.no_hp, periode);
+            await fetchPendapatan(parsedData.no_hp, periode, type);
         }
     };
 
 
-    const fetchPendapatan = async (phoneNumber: string, periodeType: PeriodeType = 'harian', showLoading: boolean = true) => {
+    const fetchPendapatan = async (phoneNumber: string, periodeType: PeriodeType = 'harian', type: OrderType = 'semua', showLoading: boolean = true, specificDate?: string, specificYear?: string, specificMonth?: string) => {
         try {
             if (showLoading) {
                 setLoading(true);
@@ -58,9 +66,14 @@ function HistoryScreen() {
             let response;
             
             if (periodeType === 'harian') {
-                response = await apiService.getPendapatanDaily(phoneNumber);
+                // Use specific date if provided, otherwise use undefined for current/default
+                const dateToUse = specificDate || undefined;
+                response = await apiService.getPendapatanDaily(phoneNumber, dateToUse, type);
             } else {
-                response = await apiService.getPendapatanMonthly(phoneNumber);
+                // Use specific year/month if provided, otherwise use undefined for current/default
+                const yearToUse = specificYear || undefined;
+                const monthToUse = specificMonth || undefined;
+                response = await apiService.getPendapatanMonthly(phoneNumber, yearToUse, monthToUse, type);
             }
             
             if (response.success && response.data) {
@@ -81,6 +94,57 @@ function HistoryScreen() {
             }
         }
     };
+    const fetchTransactionList = async (phoneNumber: string, startDate: string, endDate: string, type: OrderType = 'semua') => {
+        try {
+            setLoading(true);
+            
+            // Map type to service type for API
+            let serviceType = '';
+            if (type === 'pasca_order') {
+                serviceType = 'pasca_order';
+            } else if (type === 'live_order') {
+                serviceType = 'live_order';
+            }
+            
+            const response = await apiService.getListTransaksiManual(
+                phoneNumber,
+                startDate,
+                endDate,
+                undefined, // idKonsumen
+                serviceType || undefined,
+                undefined // searchQuery
+            );
+            
+            if (response.success && response.data) {
+                setTransactionList(response.data.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching transaction list:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Helper function to get date range for transaction list
+    const getDateRangeForTransactionList = useCallback((periodeType: PeriodeType, selectedDate: string, selectedMonth: string) => {
+        if (periodeType === 'harian') {
+            return {
+                startDate: selectedDate,
+                endDate: selectedDate
+            };
+        } else {
+            // For monthly, get the first and last day of the selected month
+            const [year, month] = selectedMonth.split('-');
+            const startDate = `${year}-${month.padStart(2, '0')}-01`;
+            const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+            const endDate = `${year}-${month.padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
+            
+            return {
+                startDate,
+                endDate
+            };
+        }
+    }, []);
 
     useEffect(() => {
         fetchUserData();
@@ -145,49 +209,34 @@ function HistoryScreen() {
     const handleDateSelect = useCallback(async (date: string) => {
         console.log('Selected date:', date);
         setSelectedDate(date);
-        setLoading(true);
         
         if (userData?.no_hp) {
-            try {
-                const response = await apiService.getPendapatanDaily(userData.no_hp, date);
-                if (response.success && response.data) {
-                    setPendapatanData(response.data?.data?.pendapatan);
-                    setOrderData(response.data?.data?.orders);
-                    if (response.data?.data?.jenis_order) {
-                        setJenisOrderData(response.data.data.jenis_order);
-                    }
-                }
-            } catch (error) {
-                console.error('Error fetching date data:', error);
-            } finally {
-                setLoading(false);
+            await fetchPendapatan(userData.no_hp, 'harian', type, true, date);
+            
+            // If in list view, also fetch transaction list
+            if (reportType === 'list') {
+                await fetchTransactionList(userData.no_hp, date, date, type);
             }
         }
-    }, [userData]);
+    }, [userData, type, reportType]);
 
     // Handle month selection
     const handleMonthSelect = useCallback(async (monthValue: string) => {
         setSelectedMonth(monthValue);
-        setLoading(true);
         
         const [year, month] = monthValue.split('-');
         if (userData?.no_hp) {
-            try {
-                const response = await apiService.getPendapatanMonthly(userData.no_hp, year, month);
-                if (response.success && response.data) {
-                    setPendapatanData(response.data?.data?.pendapatan);
-                    setOrderData(response.data?.data?.orders);
-                    if (response.data?.data?.jenis_order) {
-                        setJenisOrderData(response.data.data.jenis_order);
-                    }
-                }
-            } catch (error) {
-                console.error('Error fetching month data:', error);
-            } finally {
-                setLoading(false);
+            await fetchPendapatan(userData.no_hp, 'bulanan', type, true, undefined, year, month);
+            
+            // If in list view, also fetch transaction list
+            if (reportType === 'list') {
+                const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+                const startDate = `${year}-${month.padStart(2, '0')}-01`;
+                const endDate = `${year}-${month.padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
+                await fetchTransactionList(userData.no_hp, startDate, endDate, type);
             }
         }
-    }, [userData]);
+    }, [userData, type, reportType]);
 
     // Memoize format currency function
     const formatCurrency = useCallback((amount: number) => {
@@ -204,11 +253,51 @@ function HistoryScreen() {
         setLoading(true);
         
         if (userData?.no_hp) {
-            await fetchPendapatan(userData.no_hp, newPeriode, false);
+            await fetchPendapatan(userData.no_hp, newPeriode, type, false);
+            
+            // If in list view, also fetch transaction list
+            if (reportType === 'list') {
+                const { startDate, endDate } = getDateRangeForTransactionList(newPeriode, selectedDate, selectedMonth);
+                await fetchTransactionList(userData.no_hp, startDate, endDate, type);
+            }
         }
         
         setLoading(false);
-    }, [userData]);
+    }, [userData, type, reportType, selectedDate, selectedMonth, getDateRangeForTransactionList]);
+
+    // Handle type change
+    const handleTypeChange = useCallback(async (newType: OrderType) => {
+        setType(newType);
+        setLoading(true);
+        
+        if (userData?.no_hp) {
+            await fetchPendapatan(userData.no_hp, periode, newType, false);
+            
+            // If in list view, also fetch transaction list
+            if (reportType === 'list') {
+                const { startDate, endDate } = getDateRangeForTransactionList(periode, selectedDate, selectedMonth);
+                await fetchTransactionList(userData.no_hp, startDate, endDate, newType);
+            }
+        }
+        
+        setLoading(false);
+    }, [userData, periode, reportType, selectedDate, selectedMonth, getDateRangeForTransactionList]);
+
+    // Handle report change
+    const handleReportChange = useCallback(async (newReportType: ReportType) => {
+        setReportType(newReportType);
+        
+        // If switching to list view, fetch transaction list data
+        if (newReportType === 'list' && userData?.no_hp) {
+            const { startDate, endDate } = getDateRangeForTransactionList(periode, selectedDate, selectedMonth);
+            await fetchTransactionList(userData.no_hp, startDate, endDate, type);
+        }
+        
+        // If switching to chart view, ensure chart data is fresh
+        if (newReportType === 'chart' && userData?.no_hp) {
+            await fetchPendapatan(userData.no_hp, periode, type, true);
+        }
+    }, [userData, periode, selectedDate, selectedMonth, type, getDateRangeForTransactionList]);
 
     // Handle pull to refresh
     const onRefresh = useCallback(async () => {
@@ -217,7 +306,13 @@ function HistoryScreen() {
         try {
             if (userData?.no_hp) {
                 // Fetch balance from API
-                await fetchPendapatan(userData.no_hp, periode);
+                await fetchPendapatan(userData.no_hp, periode, type);
+                
+                // If in list view, also fetch transaction list
+                if (reportType === 'list') {
+                    const { startDate, endDate } = getDateRangeForTransactionList(periode, selectedDate, selectedMonth);
+                    await fetchTransactionList(userData.no_hp, startDate, endDate, type);
+                }
                 
                 // TODO: Fetch other data from API
                 // await fetchPendapatanData();
@@ -232,7 +327,7 @@ function HistoryScreen() {
         } finally {
             setRefreshing(false);
         }
-    }, [userData, periode]);
+    }, [userData, periode, type, reportType, selectedDate, selectedMonth, getDateRangeForTransactionList]);
 
     // Memoize charts untuk prevent re-render yang tidak perlu
     const memoizedPendapatanChart = useMemo(() => (
@@ -271,8 +366,8 @@ function HistoryScreen() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={['#0d6efd']} // Android
-                        tintColor="#0d6efd" // iOS
+                        colors={['#0097A7']} // Android
+                        tintColor="#0097A7" // iOS
                     />
                 }
             >
@@ -364,24 +459,129 @@ function HistoryScreen() {
                             ))
                         )}
                     </ScrollView>
+
+                    <View style={styles.filterDivider} />
+
+                    <View style={{...styles.filterRow, marginTop: 12}}>
+                        <Text style={styles.filterLabel}>Order:</Text>
+                        
+                        <View style={styles.filterButtons}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.filterButton,
+                                    type === 'semua' && styles.filterButtonActive
+                                ]}
+                                onPress={() => handleTypeChange('semua')}
+                            >
+                                <Text style={[
+                                    styles.filterButtonText,
+                                    type === 'semua' && styles.filterButtonTextActive
+                                ]}>
+                                    Semua
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.filterButton,
+                                    type === 'pasca_order' && styles.filterButtonActive
+                                ]}
+                                onPress={() => handleTypeChange('pasca_order')}
+                            >
+                                <Text style={[
+                                    styles.filterButtonText,
+                                    type === 'pasca_order' && styles.filterButtonTextActive
+                                ]}>
+                                    Pasca
+                                </Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                                style={[
+                                    styles.filterButton,
+                                    type === 'live_order' && styles.filterButtonActive
+                                ]}
+                                onPress={() => handleTypeChange('live_order')}
+                            >
+                                <Text style={[
+                                    styles.filterButtonText,
+                                    type === 'live_order' && styles.filterButtonTextActive
+                                ]}>
+                                    Live
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    <View style={styles.filterDivider} />
+
+                    <View style={{...styles.filterRow, marginTop: 12}}>
+                        <Text style={styles.filterLabel}>Report:</Text>
+                        
+                        <View style={styles.filterButtons}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.filterButton,
+                                    reportType === 'chart' && styles.filterButtonActive
+                                ]}
+                                onPress={() => handleReportChange('chart')}
+                            >
+                                <Text style={[
+                                    styles.filterButtonText,
+                                    reportType === 'chart' && styles.filterButtonTextActive
+                                ]}>
+                                    Chart
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.filterButton,
+                                    reportType === 'list' && styles.filterButtonActive
+                                ]}
+                                onPress={() => handleReportChange('list')}
+                            >
+                                <Text style={[
+                                    styles.filterButtonText,
+                                    reportType === 'list' && styles.filterButtonTextActive
+                                ]}>
+                                    List
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
                 </View>
                 
                 {/* Loading Indicator */}
                 {loading && (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color="#0d6efd" />
+                        <ActivityIndicator size="large" color="#0097A7" />
                         <Text style={styles.loadingText}>Memuat data...</Text>
                     </View>
                 )}
                 
-                {/* Grafik Pendapatan */}
-                {!loading && memoizedPendapatanChart}
+                {/* Conditional Rendering: Charts or Transaction List */}
+                {!loading && reportType === 'chart' && (
+                    <>
+                        {/* Grafik Pendapatan */}
+                        {memoizedPendapatanChart}
 
-                {/* Grafik Total Order */}
-                {!loading && memoizedOrderChart}
+                        {/* Grafik Total Order */}
+                        {memoizedOrderChart}
 
-                {/* Grafik Jenis Order */}
-                {!loading && memoizedJenisOrderChart}
+                        {/* Grafik Jenis Order */}
+                        {memoizedJenisOrderChart}
+                    </>
+                )}
+
+                {/* Transaction List View */}
+                {!loading && reportType === 'list' && (
+                    <TransactionList
+                        transactions={transactionList}
+                        loading={loading}
+                    />
+                )}
 
                 {/* Bottom Spacing for Tab Bar */}
                 <View style={{ height: Platform.OS === 'android' ? Math.max(insets.bottom, 20) + 180 : Math.max(insets.bottom, 20) + 120 }} />
@@ -396,7 +596,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -460,7 +660,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 4,
         borderWidth: 2,
-        borderColor: '#0d6efd',
+        borderColor: '#0097A7',
     },
     profileBadgeText: {
         color: '#ffffff',
@@ -540,8 +740,8 @@ const styles = StyleSheet.create({
         minWidth: 80,
     },
     filterButtonActive: {
-        backgroundColor: '#0d6efd',
-        borderColor: '#0d6efd',
+        backgroundColor: '#0097A7',
+        borderColor: '#0097A7',
     },
     filterButtonText: {
         fontSize: 13,
@@ -552,7 +752,7 @@ const styles = StyleSheet.create({
         color: '#ffffff',
     },
     dateList: {
-        marginTop: 12,
+        marginVertical: 12,
     },
     dateListContent: {
         gap: 8,
@@ -570,8 +770,8 @@ const styles = StyleSheet.create({
         minWidth: 50,
     },
     dateItemActive: {
-        backgroundColor: '#0d6efd',
-        borderColor: '#0d6efd',
+        backgroundColor: '#0097A7',
+        borderColor: '#0097A7',
     },
     dateItemDay: {
         fontSize: 16,
@@ -592,8 +792,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     monthItemActive: {
-        backgroundColor: '#0d6efd',
-        borderColor: '#0d6efd',
+        backgroundColor: '#0097A7',
+        borderColor: '#0097A7',
     },
     monthItemText: {
         fontSize: 13,

@@ -78,7 +78,8 @@ export default function SaldoScreen() {
                         amount: parseFloat(item.amount) || 0,
                         date: item.date || item.created_at?.split(' ')[0] || new Date().toISOString().split('T')[0],
                         time: item.time || item.created_at?.split(' ')[1] || '00:00',
-                        status: item.status || 'success'
+                        status: item.status || 'success',
+                        type: item.type || 'unknown'
                     }))
                     : [];
 
@@ -132,11 +133,11 @@ export default function SaldoScreen() {
     }, []);
 
     const handleTransfer = useCallback(() => {
-        Alert.alert('Transfer', 'Fitur transfer akan segera hadir!');
+        router.push('/saldo/transfer');
     }, []);
 
     const handleWithdraw = useCallback(() => {
-        Alert.alert('Withdraw', 'Fitur withdraw akan segera hadir!');
+        router.push('/saldo/withdraw');
     }, []);
 
     // Handle filter modal
@@ -210,11 +211,11 @@ export default function SaldoScreen() {
             style={styles.transactionItem}
             onPress={() => {
                 // If it's a pending top up transaction, navigate to confirm screen
-                if (item.type === 'Top Up' && item.status === 'pending' && item.top_up_id) {
+                if (item.type === 'topup' && item.status === 'pending' && item.bukti_topup === null) {
                     router.push({
                         pathname: '/saldo/confirm-top-up',
                         params: {
-                            topUpId: item.top_up_id,
+                            topUpId: item.id,
                             amount: Math.abs(item.amount).toString(),
                             bankName: item.bank_name || 'Bank',
                             accountNumber: item.account_number || '-',
@@ -252,8 +253,10 @@ export default function SaldoScreen() {
                 ]}>
                     {item.amount > 0 ? '+' : ''}Rp {Math.abs(item.amount).toLocaleString('id-ID')}
                 </Text>
-                {item.status === 'pending' && (
+                {item.status === 'pending' ? (
                     <Text style={styles.pendingStatus}>Pending</Text>
+                ) : item.status === 'onprocess' && (
+                    <Text style={styles.pendingStatus}>On Process</Text>
                 )}
             </View>
         </TouchableOpacity>
@@ -273,8 +276,8 @@ export default function SaldoScreen() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={['#0d6efd']} // Android
-                        tintColor="#0d6efd" // iOS
+                        colors={['#0097A7']} // Android
+                        tintColor="#0097A7" // iOS
                     />
                 }
             >
@@ -292,7 +295,7 @@ export default function SaldoScreen() {
                     </View>
                     
                     {loading ? (
-                        <ActivityIndicator size="large" color="#0d6efd" style={styles.loading} />
+                        <ActivityIndicator size="large" color="#0097A7" style={styles.loading} />
                     ) : (
                         <Text style={styles.saldoAmount}>
                             {saldo !== null ? `Rp ${saldo.toLocaleString('id-ID')}` : 'Rp 0'}
@@ -304,21 +307,21 @@ export default function SaldoScreen() {
                 <View style={styles.actionContainer}>
                     <TouchableOpacity style={styles.actionButton} onPress={handleTopUp}>
                         <View style={styles.actionIconContainer}>
-                            <Ionicons name="add-circle" size={24} color="#0d6efd" />
+                            <Ionicons name="add-circle" size={24} color="#0097A7" />
                         </View>
                         <Text style={styles.actionText}>Top Up</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.actionButton} onPress={handleTransfer}>
                         <View style={styles.actionIconContainer}>
-                            <Ionicons name="swap-horizontal" size={24} color="#0d6efd" />
+                            <Ionicons name="swap-horizontal" size={24} color="#0097A7" />
                         </View>
                         <Text style={styles.actionText}>Transfer</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.actionButton} onPress={handleWithdraw}>
                         <View style={styles.actionIconContainer}>
-                            <Ionicons name="cash" size={24} color="#0d6efd" />
+                            <Ionicons name="cash" size={24} color="#0097A7" />
                         </View>
                         <Text style={styles.actionText}>Withdraw</Text>
                     </TouchableOpacity>
@@ -329,13 +332,13 @@ export default function SaldoScreen() {
                     <View style={styles.transactionHeader}>
                         <Text style={styles.transactionTitle}>Riwayat Transaksi</Text>
                         <TouchableOpacity style={styles.filterButton} onPress={handleOpenFilter}>
-                            <Ionicons name="filter" size={20} color="#0d6efd" />
+                            <Ionicons name="filter" size={20} color="#0097A7" />
                         </TouchableOpacity>
                     </View>
                     
                     {isFilterActive && (
                         <View style={styles.filterInfo}>
-                            <Ionicons name="information-circle" size={16} color="#0d6efd" />
+                            <Ionicons name="information-circle" size={16} color="#0097A7" />
                             <Text style={styles.filterInfoText}>
                                 Menampilkan transaksi dari {formatDate(dateFrom)} sampai {formatDate(dateTo)}
                             </Text>
@@ -357,7 +360,7 @@ export default function SaldoScreen() {
                         ListEmptyComponent={
                             transactionLoading ? (
                                 <View style={styles.loadingContainer}>
-                                    <ActivityIndicator size="small" color="#0d6efd" />
+                                    <ActivityIndicator size="small" color="#0097A7" />
                                     <Text style={styles.loadingText}>Memuat riwayat transaksi...</Text>
                                 </View>
                             ) : (
@@ -393,7 +396,7 @@ export default function SaldoScreen() {
                                 <Text style={styles.dateText}>
                                     {formatDate(dateFrom) || 'Pilih tanggal mulai'}
                                 </Text>
-                                <Ionicons name="calendar" size={20} color="#0d6efd" />
+                                <Ionicons name="calendar" size={20} color="#0097A7" />
                             </TouchableOpacity>
 
                             <Text style={styles.dateLabel}>Sampai Tanggal</Text>
@@ -401,7 +404,7 @@ export default function SaldoScreen() {
                                 <Text style={styles.dateText}>
                                     {formatDate(dateTo) || 'Pilih tanggal akhir'}
                                 </Text>
-                                <Ionicons name="calendar" size={20} color="#0d6efd" />
+                                <Ionicons name="calendar" size={20} color="#0097A7" />
                             </TouchableOpacity>
                         </View>
 
@@ -437,7 +440,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 16,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -593,7 +596,7 @@ const styles = StyleSheet.create({
     filterInfoText: {
         flex: 1,
         fontSize: 14,
-        color: '#0d6efd',
+        color: '#0097A7',
         marginLeft: 8,
     },
     clearFilterButton: {
@@ -681,7 +684,7 @@ const styles = StyleSheet.create({
     },
     applyButton: {
         flex: 1,
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         padding: 12,
         borderRadius: 8,
         alignItems: 'center',

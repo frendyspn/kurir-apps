@@ -34,7 +34,7 @@ const TransaksiItem = memo(({ item, onPress }: { item: any; onPress: (item: any)
             </View>
             <View style={styles.transaksiBody}>
                 <View style={styles.addressContainer}>
-                    <Ionicons name="location-outline" size={16} color="#0d6efd" />
+                    <Ionicons name="location-outline" size={16} color="#0097A7" />
                     <Text style={styles.addressLabel}>Jemput: </Text>
                     <Text style={styles.addressText} numberOfLines={1}>
                         {item.alamat_jemput || '-'}
@@ -67,7 +67,7 @@ const TransaksiItem = memo(({ item, onPress }: { item: any; onPress: (item: any)
             </View>
             <View style={styles.viewDetailContainer}>
                 <Text style={styles.viewDetailText}>Lihat Detail</Text>
-                <Ionicons name="chevron-forward" size={16} color="#0d6efd" />
+                <Ionicons name="chevron-forward" size={16} color="#0097A7" />
             </View>
         </TouchableOpacity>
     );
@@ -236,6 +236,11 @@ export default function TransaksiManualScreen() {
         }
     }, [userData, fetchTransaksi]);
 
+    // Handle update selected transaction
+    const handleUpdateSelectedTransaksi = useCallback((updatedTransaksi: any) => {
+        setSelectedTransaksi(updatedTransaksi);
+    }, []);
+
     const handleApplyFilter = () => {
         const formattedStartDate = formatDate(startDate);
         const formattedEndDate = formatDate(endDate);
@@ -280,7 +285,7 @@ export default function TransaksiManualScreen() {
                     <Ionicons name="arrow-back" size={24} color="#ffffff" />
                 </TouchableOpacity>
                 
-                <Text style={styles.headerTitle}>Transaksi Manual</Text>
+                <Text style={styles.headerTitle}>Pasca Order</Text>
                 
                 <TouchableOpacity 
                     style={styles.addButton}
@@ -303,7 +308,7 @@ export default function TransaksiManualScreen() {
                         activeOpacity={0.7}
                     >
                         <View style={styles.filterHeaderLeft}>
-                            <Ionicons name="funnel-outline" size={20} color="#0d6efd" />
+                            <Ionicons name="funnel-outline" size={20} color="#0097A7" />
                             <Text style={styles.filterTitle}>Filter Transaksi</Text>
                         </View>
                         <Ionicons 
@@ -331,7 +336,7 @@ export default function TransaksiManualScreen() {
 
                             {loading ? (
                                 <View style={styles.loadingContainer}>
-                                    <ActivityIndicator size="small" color="#0d6efd" />
+                                    <ActivityIndicator size="small" color="#0097A7" />
                                     <Text style={styles.loadingText}>Memuat jenis layanan...</Text>
                                 </View>
                             ) : (
@@ -377,7 +382,7 @@ export default function TransaksiManualScreen() {
                 <View style={styles.resultSection}>
                     {loadingTransaksi ? (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#0d6efd" />
+                            <ActivityIndicator size="large" color="#0097A7" />
                             <Text style={styles.loadingText}>Memuat transaksi...</Text>
                         </View>
                     ) : transaksiList.length > 0 ? (
@@ -403,7 +408,7 @@ export default function TransaksiManualScreen() {
                 transparent={false}
                 onRequestClose={handleCloseModal}
             >
-                {selectedTransaksi && <TransaksiDetailModal transaksi={selectedTransaksi} onClose={handleCloseModal} onRefresh={handleRefreshAfterApprove} />}
+                {selectedTransaksi && <TransaksiDetailModal transaksi={selectedTransaksi} onClose={handleCloseModal} onRefresh={handleRefreshAfterApprove} onUpdateTransaksi={handleUpdateSelectedTransaksi} />}
             </Modal>
         </View>
     );
@@ -415,7 +420,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -503,7 +508,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 8,
         paddingVertical: 12,
         paddingHorizontal: 16,
@@ -537,7 +542,7 @@ const styles = StyleSheet.create({
     transaksiId: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     transaksiDate: {
         fontSize: 12,
@@ -611,7 +616,7 @@ const styles = StyleSheet.create({
     viewDetailText: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     emptyState: {
         padding: 40,

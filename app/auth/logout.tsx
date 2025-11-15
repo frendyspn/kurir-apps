@@ -53,7 +53,7 @@ export default function LogoutScreen() {
             <View style={styles.content}>
                 <View style={styles.card}>
                     <View style={styles.iconContainer}>
-                        <Ionicons name="log-out-outline" size={80} color="#0d6efd" />
+                        <Ionicons name="log-out-outline" size={80} color="#0097A7" />
                     </View>
                     
                     <Text style={styles.title}>Keluar dari Aplikasi</Text>
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,

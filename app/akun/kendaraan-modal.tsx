@@ -43,7 +43,7 @@ export default function KendaraanModal({ visible, onClose }: { visible: boolean;
                         <View style={styles.header}>
                             <Text style={styles.title}>Data Kendaraan</Text>
                             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color="#0d6efd" />
+                                <Ionicons name="close" size={24} color="#0097A7" />
                             </TouchableOpacity>
                         </View>
                         <View style={styles.infoGroup}>
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     closeButton: {
         padding: 4,
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     editButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 8,
         paddingVertical: 10,
         alignItems: 'center',

@@ -214,7 +214,7 @@ export default function RegisterOtpScreen() {
 
                     {loading && (
                         <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#0d6efd" />
+                            <ActivityIndicator size="large" color="#0097A7" />
                             <Text style={styles.loadingText}>Memverifikasi...</Text>
                         </View>
                     )}
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
         marginBottom: 12,
         textAlign: 'center',
     },
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     },
     resendText: {
         fontSize: 16,
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '600',
     },
     countdownText: {

@@ -46,7 +46,11 @@ export default function OtpScreen() {
 
                 // TODO: Save token/user data to AsyncStorage
                 await AsyncStorage.setItem('userToken', result.data?.token);
-                await AsyncStorage.setItem('userData', JSON.stringify(result.data));
+                
+                // Save user data - handle different response structures
+                const userData = result.data?.user_login || result.data?.user || result.data;
+                console.log('💾 Saving user data:', userData);
+                await AsyncStorage.setItem('userData', JSON.stringify(userData));
 
                 Alert.alert('Berhasil', 'OTP berhasil diverifikasi', [
                     {
@@ -178,7 +182,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
         marginBottom: 12,
         textAlign: 'center',
     },
@@ -207,7 +211,7 @@ const styles = StyleSheet.create({
     },
     resendText: {
         fontSize: 16,
-        color: '#0d6efd',
+        color: '#0097A7',
         fontWeight: '600',
     },
     devText: {

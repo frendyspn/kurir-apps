@@ -113,7 +113,7 @@ function EditProfilePhotoModal({ visible, onClose, userData, onSave }: {
                         <View style={styles.header}>
                             <Text style={styles.title}>Update Foto Profile</Text>
                             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color="#0d6efd" />
+                                <Ionicons name="close" size={24} color="#0097A7" />
                             </TouchableOpacity>
                         </View>
 
@@ -121,7 +121,7 @@ function EditProfilePhotoModal({ visible, onClose, userData, onSave }: {
                         <View style={styles.uploadSection}>
                             <Text style={styles.sectionTitle}>Foto Profile</Text>
                             <TouchableOpacity style={styles.uploadButton} onPress={pickImageDiri} disabled={loading}>
-                                <Ionicons name="camera" size={24} color="#0d6efd" />
+                                <Ionicons name="camera" size={24} color="#0097A7" />
                                 <Text style={styles.uploadButtonText}>Pilih Foto Profile</Text>
                             </TouchableOpacity>
                             {fotoDiri ? (
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#0d6efd',
+        color: '#0097A7',
     },
     closeButton: {
         padding: 4,
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     uploadButtonText: {
-        color: '#0d6efd',
+        color: '#0097A7',
         fontSize: 14,
         fontWeight: 'bold',
     },
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     saveButton: {
-        backgroundColor: '#0d6efd',
+        backgroundColor: '#0097A7',
         borderRadius: 8,
         paddingVertical: 12,
         alignItems: 'center',
