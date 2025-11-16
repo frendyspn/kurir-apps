@@ -9,10 +9,12 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "prebuildCommand": "./scripts/generate-google-services.sh"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "prebuildCommand": "./scripts/generate-google-services.sh"
     }
   },
   "submit": {

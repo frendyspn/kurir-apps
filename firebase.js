@@ -1,5 +1,5 @@
-import { initializeApp } from '@react-native-firebase/app';
-import messaging from '@react-native-firebase/messaging';
+import { initializeApp } from 'firebase/app';
+import { getDatabase } from 'firebase/database';
 
 // Firebase config dari Console
 const firebaseConfig = {
@@ -16,8 +16,27 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 console.log('🔥 Firebase app initialized successfully');
 
-// Initialize messaging
-console.log('📱 Firebase messaging initialized successfully');
+// Initialize services
+export const database = getDatabase(app);
+console.log('📊 Firebase database initialized successfully');
 
-export { messaging };
+// Lazy load messaging to avoid browser compatibility issues in Expo Go
+let messagingInstance = null;
+// export const getMessagingInstance = async () => {
+//   if (messagingInstance) return messagingInstance;
+
+//   try {
+//     const { getMessaging } = await import('firebase/messaging');
+//     messagingInstance = getMessaging(app);
+//     console.log('📱 Firebase messaging initialized successfully');
+//     return messagingInstance;
+//   } catch (error) {
+//     console.warn('⚠️ Firebase messaging not available (expected in Expo Go):', error.message);
+//     return null;
+//   }
+// };
+
+// For backward compatibility, export messaging as null initially
+export const messaging = null;
+
 export default app;

@@ -1229,7 +1229,7 @@ const TransaksiDetailModal = memo(({
                 )}
 
                 {/* Pickup Order Section - Only for PICKUP status and id_konsumen = id_sopir */}
-                {currentTransaksi.status?.toUpperCase() === 'PICKUP' && userData?.id_konsumen === currentTransaksi.id_sopir && (
+                {currentTransaksi.status?.toUpperCase() === 'PICKUP' && userData?.id_konsumen === currentTransaksi.id_kurir && (
                     <View style={styles.pickupOrderSection}>
                         {/* Checkbox for RIDE service */}
                         {currentTransaksi.jenis_layanan === 'RIDE' && (

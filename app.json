@@ -22,7 +22,8 @@
       },
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
-      "package": "com.kitabuatin.mitraklikquick"
+      "package": "com.kitabuatin.mitraklikquick",
+      "googleServicesFile": "./android/app/google-services.json"
     },
     "web": {
       "output": "static",
@@ -45,10 +46,15 @@
       [
         "@react-native-firebase/app",
         {
-          "projectId": "satukurirwebpush"
+          "android": {
+            "googleServicesFile": "./android/app/google-services.json"
+          },
+          "ios": {
+            "googleServicesFile": "./GoogleService-Info.plist"
+          }
         }
       ],
-      "expo-web-browser"
+      "@react-native-firebase/messaging"
     ],
     "experiments": {
       "typedRoutes": true,

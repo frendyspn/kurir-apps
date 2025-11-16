@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# Script to generate google-services.json from environment variables
+# This script runs during EAS Build to create the Firebase config file
+
+echo "🔧 Generating google-services.json from environment variables..."
+
+# Check if required environment variables are set
+if [ -z "$GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER" ]; then
+  echo "❌ GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER is not set"
+  exit 1
+fi
+
+if [ -z "$GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID" ]; then
+  echo "❌ GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID is not set"
+  exit 1
+fi
+
+if [ -z "$GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID" ]; then
+  echo "❌ GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID is not set"
+  exit 1
+fi
+
+if [ -z "$GOOGLE_SERVICES_API_KEY_CURRENT_KEY" ]; then
+  echo "❌ GOOGLE_SERVICES_API_KEY_CURRENT_KEY is not set"
+  exit 1
+fi
+
+# Create android/app directory if it doesn't exist
+mkdir -p android/app
+
+# Generate google-services.json
+cat > android/app/google-services.json << EOF
+{
+  "project_info": {
+    "project_number": "$GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER",
+    "firebase_url": "https://$GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "$GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID",
+    "storage_bucket": "$GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "$GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID",
+        "android_client_info": {
+          "package_name": "com.kitabuatin.mitraklikquick"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "$GOOGLE_SERVICES_API_KEY_CURRENT_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+EOF
+
+echo "✅ google-services.json generated successfully"
+
+# Verify the JSON is valid
+if command -v python3 &> /dev/null; then
+  if python3 -m json.tool android/app/google-services.json > /dev/null 2>&1; then
+    echo "✅ google-services.json is valid JSON"
+  else
+    echo "❌ google-services.json contains invalid JSON"
+    exit 1
+  fi
+fi

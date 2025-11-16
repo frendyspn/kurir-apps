@@ -95,7 +95,7 @@ function HomeScreen() {
     };
 
     useEffect(() => {
-        initializeApp();
+        // initializeApp();
     }, []);
 
     const initializeApp = async () => {

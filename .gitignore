@@ -41,3 +41,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Firebase config (generated during build)
+# /android/app/google-services.json
