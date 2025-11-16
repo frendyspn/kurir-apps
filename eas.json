@@ -6,15 +6,19 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "prebuildCommand": "bash ./scripts/generate-google-services.sh",
+      "android": { "buildType": "apk" }
     },
     "preview": {
       "distribution": "internal",
-      "prebuildCommand": "./scripts/generate-google-services.sh"
+      "prebuildCommand": "bash ./scripts/generate-google-services.sh",
+      "android": { "buildType": "apk" }
     },
     "production": {
       "autoIncrement": true,
-      "prebuildCommand": "./scripts/generate-google-services.sh"
+      "prebuildCommand": "bash ./scripts/generate-google-services.sh",
+      "android": { "buildType": "apk" }
     }
   },
   "submit": {
