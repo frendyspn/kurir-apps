@@ -11,12 +11,10 @@
     },
     "preview": {
       "distribution": "internal",
-      "prebuildCommand": "bash ./scripts/generate-google-services.sh",
       "android": { "buildType": "apk" }
     },
     "production": {
       "autoIncrement": true,
-      "prebuildCommand": "bash ./scripts/generate-google-services.sh",
       "android": { "buildType": "apk" }
     }
   },
