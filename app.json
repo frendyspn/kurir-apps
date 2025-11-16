@@ -23,7 +23,7 @@
       "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
       "package": "com.kitabuatin.mitraklikquick",
-      "googleServicesFile": "./android/app/google-services.json"
+      "googleServicesFile": "./assets/google-services.json"
     },
     "web": {
       "output": "static",
