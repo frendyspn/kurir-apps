@@ -47,7 +47,7 @@
         "@react-native-firebase/app",
         {
           "android": {
-            "googleServicesFile": "./android/app/google-services.json"
+            "googleServicesFile": "./assets/google-services.json"
           },
           "ios": {
             "googleServicesFile": "./GoogleService-Info.plist"

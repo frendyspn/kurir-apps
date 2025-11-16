@@ -7,7 +7,6 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "prebuildCommand": "bash ./scripts/generate-google-services.sh",
       "android": { "buildType": "apk" }
     },
     "preview": {
