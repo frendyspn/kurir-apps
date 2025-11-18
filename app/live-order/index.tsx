@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RealtimeOrderList from '../../components/realtime-order-list';
 import socketService from '../../services/socket';
@@ -181,6 +181,17 @@ export default function TransaksiManualScreen() {
         }, [])
     );
 
+    useEffect(() => {
+            const backAction = () => {
+                router.back();
+                return true;
+            };
+    
+            const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    
+            return () => backHandler.remove();
+        }, []);
+
     const fetchUserData = async () => {
         const data = await AsyncStorage.getItem('userData');
         if (data) {
@@ -237,7 +248,7 @@ export default function TransaksiManualScreen() {
                 phoneNumber,
                 currentStartDate,
                 currentEndDate,
-                filters?.no_hp || phoneNumber,
+                userData?.id_konsumen,
                 filters?.serviceType || '',
                 filters?.searchQuery || ''
             );

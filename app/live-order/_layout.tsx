@@ -6,6 +6,7 @@ export default function LiveOrderLayout() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="tambah" options={{ headerShown: false }} />
       <Stack.Screen name="detail" options={{ headerShown: false }} />
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
       <Stack.Screen name="edit" options={{ headerShown: false }} />
     </Stack>
   );

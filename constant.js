@@ -57,6 +57,7 @@ export const API_ENDPOINTS = {
 
     // Kurir Orders
     GET_AVAILABLE_KURIR_ORDERS: `${API_BASE_URL}/kurir/v1/kurir-orders/available`,
+    GET_NOTIFICATION_ENDPOINT: `${API_BASE_URL}/kurir/v1/notifications`,
     ACCEPT_KURIR_ORDER: `${API_BASE_URL}/kurir/v1/kurir-orders`,
     CREATE_KURIR_ORDER: `${API_BASE_URL}/kurir/v1/kurir-orders`,
     GET_MY_KURIR_ORDERS: `${API_BASE_URL}/kurir/v1/kurir-orders/my-orders`,

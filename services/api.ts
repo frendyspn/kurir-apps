@@ -36,7 +36,7 @@ class ApiService {
             console.log('Content-Type:', response.headers.get('content-type'));
 
             const responseText = await response.text();
-            console.log('Response:', responseText.substring(0, 500));
+            console.log('Response:', responseText.substring(0, 1000));
             // console.log('Response:', responseText);
 
             // Cek apakah response adalah JSON
@@ -107,10 +107,13 @@ class ApiService {
     }
 
     // Verifikasi OTP
-    async verifyOtp(phoneNumber: string, otp: string): Promise<ApiResponse> {
+    async verifyOtp(phoneNumber: string, otp: string, fcmToken?: string): Promise<ApiResponse> {
         const formData = new FormData();
         formData.append('username', phoneNumber);
         formData.append('otp', otp);
+        if (fcmToken) {
+            formData.append('fcm_token', fcmToken);
+        }
 
         return this.request(API_ENDPOINTS.VERIFY_OTP, {
             method: 'POST',
@@ -739,6 +742,17 @@ class ApiService {
         });
     }
 
+        // Get Notification (Unread Count)
+        async getNotification(id_konsumen: string): Promise<ApiResponse> {
+            // POST request, send id_konsumen
+            const formData = new FormData();
+            formData.append('id_konsumen', id_konsumen);
+            return this.request(API_ENDPOINTS.GET_NOTIFICATION_ENDPOINT, {
+                method: 'POST',
+                body: formData,
+            });
+        }
+
     // Create Transfer Request
     async createTransferRequest(data: {
         no_hp_sender: string;
@@ -805,7 +819,9 @@ class ApiService {
         nama_pelanggan?: string;
         nama_layanan: string;
         alamat_penjemputan: string;
+        link_maps_penjemputan: string;
         alamat_tujuan: string;
+        link_maps_tujuan: string;
         biaya_antar: string;
         nama_toko?: string;
         agen_kurir: string;
@@ -830,7 +846,9 @@ class ApiService {
         }
         formData.append('nama_layanan', data.nama_layanan);
         formData.append('alamat_penjemputan', data.alamat_penjemputan);
+        formData.append('link_maps_penjemputan', data.link_maps_penjemputan);
         formData.append('alamat_tujuan', data.alamat_tujuan);
+        formData.append('link_maps_tujuan', data.link_maps_tujuan);
         formData.append('biaya_antar', data.biaya_antar);
         if (data.nama_toko) {
             formData.append('nama_toko', data.nama_toko);
@@ -858,12 +876,18 @@ class ApiService {
         endDate: string,
         idKonsumen?: string,
         serviceType?: string,
-        searchQuery?: string
+        searchQuery?: string,
+        id?: string,
     ): Promise<ApiResponse> {
         const formData = new FormData();
-        formData.append('no_hp', phoneNumber);
-        formData.append('start_date', startDate);
-        formData.append('end_date', endDate);
+        if (id) {
+            formData.append('id', id);
+        } else {
+            formData.append('no_hp', phoneNumber);
+            formData.append('start_date', startDate);
+            formData.append('end_date', endDate);
+        }
+        
 
         if (idKonsumen) {
             formData.append('id_konsumen', idKonsumen);
@@ -876,6 +900,8 @@ class ApiService {
         if (searchQuery) {
             formData.append('search', searchQuery);
         }
+
+        
 
         return this.request(API_ENDPOINTS.LIST_LIVE_ORDER, {
             method: 'POST',
