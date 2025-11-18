@@ -34,11 +34,11 @@ export default function LoginScreen() {
         setLoading(true);
 
         try {
-            // Kirim ke API login
             const result = await apiService.login(phoneNumber);
 
             if (result.success) {
                 console.log('Login successful:', result.data);
+                
                 // Navigate ke OTP screen
                 router.push({
                     pathname: '/auth/otp',

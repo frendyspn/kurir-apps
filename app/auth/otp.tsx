@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import messaging from '@react-native-firebase/messaging';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -40,17 +39,7 @@ export default function OtpScreen() {
         setLoading(true);
 
         try {
-            // Ambil FCM token
-            let fcmToken = "";
-            try {
-                fcmToken = await messaging().getToken();
-                console.log("FCM token for OTP:", fcmToken);
-            } catch (e) {
-                console.warn("Gagal ambil FCM token", e);
-            }
-
-            // Kirim ke API verifyOtp
-            const result = await apiService.verifyOtp(phoneNumber, otpValue, fcmToken);
+            const result = await apiService.verifyOtp(phoneNumber, otpValue);
 
             if (result.success) {
                 console.log('OTP verified successfully:', result.data);

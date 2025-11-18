@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+
 interface Props {
   visible: boolean;
   title: string;

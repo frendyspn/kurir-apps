@@ -202,7 +202,7 @@ export default function TransaksiManualScreen() {
                 phoneNumber,
                 currentStartDate,
                 currentEndDate,
-                userData?.id_konsumen,
+                filters?.no_hp || phoneNumber,
                 filters?.serviceType || '',
                 filters?.searchQuery || ''
             );

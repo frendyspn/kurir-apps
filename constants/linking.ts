@@ -43,7 +43,7 @@ const linking: LinkingOptions<ReactNavigation.RootParamList> = {
         screens: {
           index: 'live-orders',
           tambah: 'add-live-order',
-          detail: ':id',
+          detail: 'detail/:id',
         },
       },
 

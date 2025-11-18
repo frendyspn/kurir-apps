@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Clipboard, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+
 export default function LiveOrderDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();

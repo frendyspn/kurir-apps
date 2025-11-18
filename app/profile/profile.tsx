@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useEffect } from 'react';
-import { BackHandler, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
@@ -8,17 +8,6 @@ export default function ProfileScreen() {
         // Redirect to akun screen since profile is part of akun
         router.replace('/akun');
     }, []);
-
-    useEffect(() => {
-            const backAction = () => {
-                router.back();
-                return true;
-            };
-    
-            const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-    
-            return () => backHandler.remove();
-        }, []);
 
     return (
         <SafeAreaView style={styles.container}>

@@ -23,9 +23,7 @@ export default function TambahTransaksiScreen() {
     const [alamatAntar, setAlamatAntar] = useState<string>('');
     const [biayaAntar, setBiayaAntar] = useState<string>('');
     const [namaRestoToko, setNamaRestoToko] = useState<string>('');
-    const [linkMapsPenjemputan, setLinkMapsPenjemputan] = useState<string>('');
-    const [linkMapsAntar, setLinkMapsAntar] = useState<string>('');
-
+    
     // Produk state
     const [produkList, setProdukList] = useState<Array<{
         nama_barang: string;
@@ -297,12 +295,6 @@ export default function TambahTransaksiScreen() {
             return;
         }
 
-        // Jika kedua link maps diisi, tidak boleh sama
-        if (linkMapsPenjemputan && linkMapsAntar && linkMapsPenjemputan === linkMapsAntar) {
-            alert('Link Maps Penjemputan dan Link Maps Antar tidak boleh sama!');
-            return;
-        }
-
         try {
             setLoading(true);
             
@@ -322,9 +314,7 @@ export default function TambahTransaksiScreen() {
                 nama_pelanggan: selectedCustomer ? JSON.parse(selectedCustomer).nama_lengkap : undefined,
                 nama_layanan: layanan,
                 alamat_penjemputan: alamatJemput,
-                link_maps_penjemputan: linkMapsPenjemputan,
                 alamat_tujuan: alamatAntar,
-                link_maps_tujuan: linkMapsAntar,
                 biaya_antar: biayaAntar,
                 nama_toko: (layanan === 'FOOD' || layanan === 'SHOP') ? namaRestoToko : undefined,
                 agen_kurir: user.id_konsumen, // Using agen phone number
@@ -527,24 +517,6 @@ export default function TambahTransaksiScreen() {
                         />
                     </View>
 
-                    <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Link Maps Penjemputan</Text>
-                        <View style={styles.priceInputContainer}>
-                            <TextInput
-                                style={styles.priceInput}
-                                value={linkMapsPenjemputan}
-                                onChangeText={setLinkMapsPenjemputan}
-                                placeholder="Masukkan link maps penjemputan"
-                                placeholderTextColor="#adb5bd"
-                                multiline
-                                numberOfLines={3}
-                                textAlignVertical="top"
-                            />
-                        </View>
-                    </View>
-
-                    
-
                     {/* Alamat Antar */}
                     <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>Alamat Antar *</Text>
@@ -558,22 +530,6 @@ export default function TambahTransaksiScreen() {
                             numberOfLines={3}
                             textAlignVertical="top"
                         />
-                    </View>
-
-                    <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Link Maps Antar</Text>
-                        <View style={styles.priceInputContainer}>
-                            <TextInput
-                                style={styles.priceInput}
-                                value={linkMapsAntar}
-                                onChangeText={setLinkMapsAntar}
-                                placeholder="Masukkan link maps antar"
-                                placeholderTextColor="#adb5bd"
-                                multiline
-                                numberOfLines={3}
-                                textAlignVertical="top"
-                            />
-                        </View>
                     </View>
 
                     {/* Biaya Antar */}

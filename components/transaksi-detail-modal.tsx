@@ -5,8 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { memo, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
+import { ActivityIndicator, Alert, BackHandler, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface TransaksiDetailModalProps {
     transaksi: any;
@@ -807,8 +806,6 @@ const TransaksiDetailModal = memo(({
                     )}
                 </View>
 
-
-
                 {/* Location Info */}
                 <View style={styles.modalSection}>
                     <View style={styles.modalSectionHeader}>
@@ -863,56 +860,6 @@ const TransaksiDetailModal = memo(({
                         </View>
                     </View>
                 </View>
-
-                    {/* Customer Info */}
-                    <View style={styles.modalSection}>
-                        <View style={styles.modalSectionHeader}>
-                            <Ionicons name="person-outline" size={20} color="#0097A7" />
-                            <Text style={styles.modalSectionTitle}>Informasi Customer</Text>
-                        </View>
-                        <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>Nama Customer</Text>
-                            <Text style={styles.infoValue}>{currentTransaksi.nama_pemesan || '-'}</Text>
-                        </View>
-                        <View style={styles.modalDivider} />
-                        {['PICKUP', 'SEND'].includes((currentTransaksi.status || '').toUpperCase()) ? (
-                            <View style={styles.infoRow}>
-                                <View style={{ flexDirection: 'row', gap: 12 }}>
-                                    <TouchableOpacity
-                                        style={[styles.contactButton, { backgroundColor: '#25D366', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }]}
-                                        onPress={() => {
-                                            const phone = currentTransaksi.no_hp_pemesan;
-                                            if (phone) {
-                                                const url = `https://wa.me/${phone.replace(/[^0-9]/g, '')}`;
-                                                Linking.openURL(url);
-                                            }
-                                        }}
-                                    >
-                                        <Ionicons name="logo-whatsapp" size={20} color="#fff" style={{ marginRight: 6 }} />
-                                        <Text style={styles.contactButtonText}>WhatsApp</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.contactButton, { backgroundColor: '#0097A7', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }]}
-                                        onPress={() => {
-                                            const phone = currentTransaksi.no_hp_pemesan;
-                                            if (phone) {
-                                                const url = `tel:${phone.replace(/[^0-9]/g, '')}`;
-                                                Linking.openURL(url);
-                                            }
-                                        }}
-                                    >
-                                        <Ionicons name="call-outline" size={20} color="#fff" style={{ marginRight: 6 }} />
-                                        <Text style={styles.contactButtonText}>Telepon</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={styles.infoRow}>
-                                <Text style={styles.infoLabel}>No. HP Customer</Text>
-                                <Text style={styles.infoValue}>{currentTransaksi.no_hp_pemesan || '-'}</Text>
-                            </View>
-                        )}
-                    </View>
 
                 {/* Products Info - Show if id_penjualan exists */}
                 {currentTransaksi.id_penjualan && (
@@ -1350,7 +1297,7 @@ const TransaksiDetailModal = memo(({
                 )}
 
                 {/* Complete Order Section - Only for SEND status and id_konsumen = id_sopir */}
-                {currentTransaksi.status?.toUpperCase() === 'SEND' && userData?.id_konsumen === currentTransaksi.id_kurir && (
+                {currentTransaksi.status?.toUpperCase() === 'SEND' && userData?.id_konsumen === currentTransaksi.id_sopir && (
                     <View style={styles.completeOrderSection}>
                         {/* Checkbox for RIDE service */}
                         {currentTransaksi.jenis_layanan === 'RIDE' && (
@@ -1441,23 +1388,6 @@ const TransaksiDetailModal = memo(({
 TransaksiDetailModal.displayName = 'TransaksiDetailModal';
 
 const styles = StyleSheet.create({
-    contactButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 6,
-        marginHorizontal: 2,
-    },
-    contactButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 6,
-    textShadowColor: 'rgba(0,0,0,0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-    },
     modalContainer: {
         flex: 1,
         backgroundColor: '#f8f9fa',
