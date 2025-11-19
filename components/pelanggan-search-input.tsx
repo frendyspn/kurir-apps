@@ -1,15 +1,17 @@
+import { apiService } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Modal,
+    ActivityIndicator, Alert, Modal,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
+import Input from './input';
 
 interface PelangganSearchInputProps {
     label: string;
@@ -38,22 +40,32 @@ export default function PelangganSearchInput({
 }: PelangganSearchInputProps) {
     const [modalVisible, setModalVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [showTambahForm, setShowTambahForm] = useState(false);
+    const [namaBaru, setNamaBaru] = useState('');
+    const [noHpBaru, setNoHpBaru] = useState('');
+    const [loadingTambah, setLoadingTambah] = useState(false);
 
     const handleSearch = async () => {
         if (searchQuery.trim()) {
             await onSearch(searchQuery.trim());
         }
+        // Reset form tambah pelanggan, tombol tetap muncul jika hasil kosong
+        setShowTambahForm(false);
     };
 
     const handleSelect = (selectedValue: string, selectedLabel: string) => {
         onChange(selectedValue);
         setModalVisible(false);
         setSearchQuery('');
+        setShowTambahForm(false);
     };
 
     const handleCloseModal = () => {
         setModalVisible(false);
         setSearchQuery('');
+        setShowTambahForm(false);
+        setNamaBaru('');
+        setNoHpBaru('');
         if (onClearResults) {
             onClearResults();
         }
@@ -61,8 +73,52 @@ export default function PelangganSearchInput({
 
     const handleClearSearch = () => {
         setSearchQuery('');
+        setShowTambahForm(false);
         if (onClearResults) {
             onClearResults();
+        }
+    };
+
+    // Handler tambah pelanggan baru
+    const handleTambahPelanggan = async () => {
+        if (!namaBaru.trim() || !noHpBaru.trim()) {
+            Alert.alert('Error', 'Nama dan No HP wajib diisi');
+            return;
+        }
+        setLoadingTambah(true);
+        try {
+            // Ambil id_konsumen user yang login dari AsyncStorage
+            const userData = await AsyncStorage.getItem('userData');
+            let id_konsumen = '';
+            if (userData) {
+                try {
+                    const user = JSON.parse(userData);
+                    id_konsumen = user.id_konsumen || '';
+                } catch {}
+            }
+            // Panggil API untuk tambah pelanggan
+            const result = await apiService.addKonsumen({
+                nama_lengkap: namaBaru,
+                no_hp: noHpBaru,
+                alamat_lengkap: '-',
+                id_konsumen,
+            });
+            if (result.success && result.data) {
+                // Pilih pelanggan baru otomatis
+                onChange(result.data.id_konsumen || result.data.id);
+                setModalVisible(false);
+                setSearchQuery('');
+                setShowTambahForm(false);
+                setNamaBaru('');
+                setNoHpBaru('');
+                Alert.alert('Berhasil', 'Pelanggan berhasil ditambahkan');
+            } else {
+                Alert.alert('Error', result.message || 'Gagal menambah pelanggan');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Gagal menambah pelanggan');
+        } finally {
+            setLoadingTambah(false);
         }
     };
 
@@ -98,106 +154,165 @@ export default function PelangganSearchInput({
                             </TouchableOpacity>
                         </View>
 
-                        {/* Search Section */}
-                        <View style={styles.searchSection}>
-                            <View style={styles.searchInputContainer}>
-                                <Ionicons name="search" size={20} color="#6c757d" style={styles.searchIcon} />
-                                <TextInput
-                                    style={styles.searchInput}
-                                    value={searchQuery}
-                                    onChangeText={setSearchQuery}
-                                    placeholder={searchPlaceholder}
-                                    placeholderTextColor="#adb5bd"
-                                    onSubmitEditing={handleSearch}
-                                />
-                                {searchQuery.length > 0 && (
-                                    <TouchableOpacity
-                                        onPress={handleClearSearch}
-                                        style={styles.clearButton}
-                                    >
-                                        <Ionicons name="close-circle" size={20} color="#6c757d" />
-                                    </TouchableOpacity>
-                                )}
+                        {/* Search Section / Insert Section */}
+                        {!showTambahForm ? (
+                            <View style={styles.searchSection}>
+                                <View style={styles.searchInputContainer}>
+                                    <Ionicons name="search" size={20} color="#6c757d" style={styles.searchIcon} />
+                                    <TextInput
+                                        style={styles.searchInput}
+                                        value={searchQuery}
+                                        onChangeText={setSearchQuery}
+                                        placeholder={searchPlaceholder}
+                                        placeholderTextColor="#adb5bd"
+                                        onSubmitEditing={handleSearch}
+                                    />
+                                    {searchQuery.length > 0 && (
+                                        <TouchableOpacity
+                                            onPress={handleClearSearch}
+                                            style={styles.clearButton}
+                                        >
+                                            <Ionicons name="close-circle" size={20} color="#6c757d" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                                <TouchableOpacity
+                                    style={[styles.searchButton, isSearching && styles.searchButtonDisabled]}
+                                    onPress={handleSearch}
+                                    disabled={isSearching || !searchQuery.trim()}
+                                >
+                                    {isSearching ? (
+                                        <ActivityIndicator size="small" color="#ffffff" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="search" size={18} color="#ffffff" />
+                                            <Text style={styles.searchButtonText}>Cari</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
                             </View>
-                            
-                            <TouchableOpacity
-                                style={[styles.searchButton, isSearching && styles.searchButtonDisabled]}
-                                onPress={handleSearch}
-                                disabled={isSearching || !searchQuery.trim()}
-                            >
-                                {isSearching ? (
-                                    <ActivityIndicator size="small" color="#ffffff" />
-                                ) : (
-                                    <>
-                                        <Ionicons name="search" size={18} color="#ffffff" />
-                                        <Text style={styles.searchButtonText}>Cari</Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
-                        </View>
+                        ) : (
+                            <View style={{ padding: 16 }}>
+                                <Input
+                                    label="Nama Pelanggan"
+                                    value={namaBaru}
+                                    onChangeText={setNamaBaru}
+                                    placeholder="Nama Pelanggan"
+                                    autoCapitalize="words"
+                                    style={{ marginBottom: 8 }}
+                                />
+                                <Input
+                                    label="No HP Pelanggan"
+                                    value={noHpBaru}
+                                    onChangeText={setNoHpBaru}
+                                    placeholder="No HP Pelanggan"
+                                    keyboardType="phone-pad"
+                                    style={{ marginBottom: 8 }}
+                                />
+                                <TouchableOpacity
+                                    style={{
+                                        backgroundColor: '#0097A7',
+                                        borderRadius: 8,
+                                        paddingVertical: 12,
+                                        alignItems: 'center',
+                                        marginTop: 8,
+                                    }}
+                                    onPress={handleTambahPelanggan}
+                                    disabled={loadingTambah}
+                                >
+                                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
+                                        {loadingTambah ? 'Menyimpan...' : 'Simpan Pelanggan'}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{ marginTop: 12, alignItems: 'center' }}
+                                    onPress={() => setShowTambahForm(false)}
+                                >
+                                    <Text style={{ color: '#0097A7', fontWeight: '600', fontSize: 13 }}>Kembali ke Cari Pelanggan</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
 
                         {/* Results */}
-                        <ScrollView style={styles.optionsList}>
-                            {(() => {
-                                if (isSearching) {
-                                    return (
-                                        <View style={styles.loadingContainer}>
-                                            <ActivityIndicator size="large" color="#0097A7" />
-                                            <Text style={styles.loadingText}>Mencari pelanggan...</Text>
-                                        </View>
-                                    );
-                                } else if (options.length === 0) {
-                                    return (
-                                        <View style={styles.emptyContainer}>
-                                            <Ionicons name="search-outline" size={48} color="#adb5bd" />
-                                            <Text style={styles.emptyText}>
-                                                {searchQuery ? 'Pelanggan tidak ditemukan' : 'Masukkan no HP atau nama untuk mencari'}
-                                            </Text>
-                                            <Text style={styles.emptySubtext}>
-                                                {searchQuery ? 'Coba kata kunci lain' : 'Klik tombol "Cari" untuk memulai'}
-                                            </Text>
-                                        </View>
-                                    );
-                                } else {
-                                    return (
-                                        <>
-                                            <Text style={styles.resultCount}>
-                                                Ditemukan {options.length} pelanggan
-                                            </Text>
-                                            {options.map((option, index) => (
-                                                <TouchableOpacity
-                                                    key={`${option.value}-${index}`}
-                                                    style={[
-                                                        styles.option,
-                                                        value === option.value && styles.selectedOption,
-                                                    ]}
-                                                    onPress={() => handleSelect(option.value, option.label)}
-                                                >
-                                                    <View style={styles.optionContent}>
-                                                        <Ionicons 
-                                                            name="person-circle-outline" 
-                                                            size={24} 
-                                                            color={value === option.value ? '#0097A7' : '#6c757d'} 
-                                                        />
-                                                        <Text
-                                                            style={[
-                                                                styles.optionText,
-                                                                value === option.value && styles.selectedOptionText,
-                                                            ]}
+                        {!showTambahForm && (
+                            <ScrollView style={styles.optionsList}>
+                                {(() => {
+                                    if (isSearching) {
+                                        return (
+                                            <View style={styles.loadingContainer}>
+                                                <ActivityIndicator size="large" color="#0097A7" />
+                                                <Text style={styles.loadingText}>Mencari pelanggan...</Text>
+                                            </View>
+                                        );
+                                    } else if (options.length === 0) {
+                                        return (
+                                            <View style={styles.emptyContainer}>
+                                                <Ionicons name="search-outline" size={48} color="#adb5bd" />
+                                                <Text style={styles.emptyText}>
+                                                    {searchQuery ? 'Pelanggan tidak ditemukan' : 'Masukkan no HP atau nama untuk mencari'}
+                                                </Text>
+                                                <Text style={styles.emptySubtext}>
+                                                    {searchQuery ? 'Coba kata kunci lain' : 'Klik tombol "Cari" untuk memulai'}
+                                                </Text>
+                                                {searchQuery.trim().length > 3 && options.length === 0 && (
+                                                    <View style={{ width: '100%', marginTop: 16 }}>
+                                                        <TouchableOpacity
+                                                            style={{
+                                                                backgroundColor: '#28a745',
+                                                                borderRadius: 8,
+                                                                paddingVertical: 12,
+                                                                alignItems: 'center',
+                                                                marginBottom: 8,
+                                                            }}
+                                                            onPress={() => setShowTambahForm(true)}
                                                         >
-                                                            {option.label}
-                                                        </Text>
+                                                            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Tambah Pelanggan Baru</Text>
+                                                        </TouchableOpacity>
                                                     </View>
-                                                    {value === option.value && (
-                                                        <Ionicons name="checkmark-circle" size={24} color="#0097A7" />
-                                                    )}
-                                                </TouchableOpacity>
-                                            ))}
-                                        </>
-                                    );
-                                }
-                            })()}
-                        </ScrollView>
+                                                )}
+                                            </View>
+                                        );
+                                    } else {
+                                        return (
+                                            <>
+                                                <Text style={styles.resultCount}>
+                                                    Ditemukan {options.length} pelanggan
+                                                </Text>
+                                                {options.map((option, index) => (
+                                                    <TouchableOpacity
+                                                        key={`${option.value}-${index}`}
+                                                        style={[
+                                                            styles.option,
+                                                            value === option.value && styles.selectedOption,
+                                                        ]}
+                                                        onPress={() => handleSelect(option.value, option.label)}
+                                                    >
+                                                        <View style={styles.optionContent}>
+                                                            <Ionicons 
+                                                                name="person-circle-outline" 
+                                                                size={24} 
+                                                                color={value === option.value ? '#0097A7' : '#6c757d'} 
+                                                            />
+                                                            <Text
+                                                                style={[
+                                                                    styles.optionText,
+                                                                    value === option.value && styles.selectedOptionText,
+                                                                ]}
+                                                            >
+                                                                {option.label}
+                                                            </Text>
+                                                        </View>
+                                                        {value === option.value && (
+                                                            <Ionicons name="checkmark-circle" size={24} color="#0097A7" />
+                                                        )}
+                                                    </TouchableOpacity>
+                                                ))}
+                                            </>
+                                        );
+                                    }
+                                })()}
+                            </ScrollView>
+                        )}
                     </View>
                 </View>
             </Modal>
