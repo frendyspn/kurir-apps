@@ -45,3 +45,4 @@ app-example
 # Firebase config (generated during build)
 # /android/app/google-services.json
 service-account.json
+service-account.json
