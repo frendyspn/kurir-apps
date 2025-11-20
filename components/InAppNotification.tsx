@@ -38,7 +38,7 @@ export default function InAppNotification({
       // Auto hide after 4s
       const timer = setTimeout(() => {
         hide();
-      }, 4000);
+      }, 10000);
 
       return () => clearTimeout(timer);
     }
@@ -101,7 +101,19 @@ export default function InAppNotification({
         <Text style={{ color: titleColor, fontWeight: "700", fontSize: 16, letterSpacing: 0.2, marginLeft: 12 }}>
           {title}
         </Text>
-        <Text style={{ color: bodyColor, marginTop: 6, fontSize: 14, lineHeight: 20, marginLeft: 12 }}>
+        <Text
+          style={{
+            color: bodyColor,
+            marginTop: 6,
+            fontSize: 14,
+            lineHeight: 20,
+            marginLeft: 12,
+            flexWrap: "wrap",
+            flexShrink: 1,
+            width: "100%",
+          }}
+          numberOfLines={3}
+        >
           {body}
         </Text>
         </View>

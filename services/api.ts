@@ -1064,6 +1064,18 @@ class ApiService {
             body: formData,
         });
     }
+
+    // Logout API
+    async logout(phoneNumber: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('username', phoneNumber);
+
+        return this.request(API_ENDPOINTS.LOGOUT, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
 }
 
 export const apiService = new ApiService();

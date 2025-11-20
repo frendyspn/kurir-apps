@@ -521,6 +521,9 @@ const TransaksiDetailModal = memo(({
                 ]);
             } else {
                 Alert.alert('Error', response.message || 'Gagal mengambil order');
+                if (onRefresh) {
+                                onRefresh();
+                            }
             }
         } catch (error) {
             console.error('Error ambil order:', error);
@@ -844,6 +847,20 @@ const TransaksiDetailModal = memo(({
                         <View style={styles.locationContent}>
                             <Text style={styles.locationLabel}>Alamat Penjemputan</Text>
                             <Text style={styles.locationText}>{currentTransaksi.alamat_jemput || '-'}</Text>
+                            {
+                                currentTransaksi.titik_jemput !== '' && currentTransaksi.titik_jemput ? (
+                                    <TouchableOpacity
+                                        style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0097A7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignSelf: 'flex-start' }}
+                                        onPress={() => {
+                                        Linking.openURL(currentTransaksi.titik_jemput);
+                                        }}
+                                    >
+                                        <Ionicons name="map-outline" size={16} color="#ffffff" />
+                                        <Text style={{ color: '#ffffff' }}>Buka Peta</Text>
+                                    </TouchableOpacity>
+                                ) : null
+                            }
+                            
                         </View>
                     </View>
 
@@ -860,6 +877,19 @@ const TransaksiDetailModal = memo(({
                         <View style={styles.locationContent}>
                             <Text style={styles.locationLabel}>Alamat Tujuan</Text>
                             <Text style={styles.locationText}>{currentTransaksi.alamat_antar || '-'}</Text>
+                            {
+                                currentTransaksi.titik_antar !== '' && currentTransaksi.titik_antar ? (
+                                    <TouchableOpacity
+                                        style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0097A7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignSelf: 'flex-start' }}
+                                        onPress={() => {
+                                        Linking.openURL(currentTransaksi.titik_antar);
+                                        }}
+                                    >
+                                        <Ionicons name="map-outline" size={16} color="#ffffff" />
+                                        <Text style={{ color: '#ffffff' }}>Buka Peta</Text>
+                                    </TouchableOpacity>
+                                ) : null
+                            }
                         </View>
                     </View>
                 </View>
@@ -1418,7 +1448,9 @@ const TransaksiDetailModal = memo(({
                 )}
 
                 {/* Edit Order Section - Only for LIVE_ORDER source and status != FINISH */}
-                {currentTransaksi.source === 'LIVE_ORDER' && currentTransaksi.status?.toUpperCase() !== 'FINISH' && (
+                {currentTransaksi.source === 'LIVE_ORDER' &&
+                 currentTransaksi.status?.toUpperCase() !== 'FINISH' &&
+                 (userData?.id_konsumen === currentTransaksi.id_agen || userData?.id_konsumen === currentTransaksi.id_kurir) && (
                     <View style={styles.editOrderSection}>
                         <TouchableOpacity
                             style={styles.editOrderButton}

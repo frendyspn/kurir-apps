@@ -1,3 +1,4 @@
+import { subscribeCityTopic } from "@/utils/fcmTopicManager";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -62,6 +63,10 @@ export default function OtpScreen() {
                 const userData = result.data?.user_login || result.data?.user || result.data;
                 console.log('💾 Saving user data:', userData);
                 await AsyncStorage.setItem('userData', JSON.stringify(userData));
+
+                if (userData?.kota) {
+                    await subscribeCityTopic(userData.kota);
+                }
 
                 Alert.alert('Berhasil', 'OTP berhasil diverifikasi', [
                     {

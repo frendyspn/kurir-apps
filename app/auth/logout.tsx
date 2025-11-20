@@ -1,11 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { apiService } from '../../services/api';
 
 export default function LogoutScreen() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [userData, setUserData] = useState<any>(null);
+
+    const fetchUserData = async () => {
+        const data = await AsyncStorage.getItem('userData');
+        console.log('Fetched user data:', data);
+        if (data) {
+            const parsedData = JSON.parse(data);
+            setUserData(parsedData);
+        }
+    };
+
+    useEffect(() => {
+        fetchUserData();
+    }, []);
 
     const handleLogout = async () => {
         Alert.alert(
@@ -22,6 +37,8 @@ export default function LogoutScreen() {
                     onPress: async () => {
                         setIsLoggingOut(true);
                         try {
+
+                            const result = await apiService.logout(userData.no_hp);
                             // Hapus data user dari AsyncStorage
                             await AsyncStorage.removeItem('userData');
                             await AsyncStorage.removeItem('userToken');

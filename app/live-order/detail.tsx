@@ -36,7 +36,7 @@ export default function LiveOrderDetailScreen() {
         try {
             setLoading(true);
             setError(null);
-
+console.log('Fetching transaction detail for ID:', id);
             const userData = await AsyncStorage.getItem('userData');
             if (!userData) {
                 setError('Data user tidak ditemukan');
@@ -56,6 +56,7 @@ export default function LiveOrderDetailScreen() {
                 startDate,
                 endDate,
                 user.no_hp,
+                '',
                 '',
                 id // Search by order code or ID
             );

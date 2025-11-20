@@ -16,6 +16,8 @@ import { notificationEvents } from '../../utils/notificationEvents'; // sesuaika
 
 function HomeScreen() {
     const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+    const [listNotif, setListNotif] = useState<any[]>([]);
+    const [showNotifModal, setShowNotifModal] = useState(false);
     const insets = useSafeAreaInsets();
     const [saldo, setSaldo] = useState(0);
     const [showSaldo, setShowSaldo] = useState(true);
@@ -53,6 +55,7 @@ function HomeScreen() {
             if (response.success && response.data) {
                 // Asumsikan response.data.unread_count adalah jumlah notif belum dibaca
                 setUnreadNotifCount(response.data?.data?.notifications_new || 0);
+                setListNotif(response.data?.data?.notifications || []);
             }
         } catch (error) {
             console.error('Error fetching unread notification count:', error);
@@ -282,7 +285,7 @@ function HomeScreen() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.notificationButton}>
+                <TouchableOpacity style={styles.notificationButton} onPress={() => setShowNotifModal(true)}>
                     <Ionicons name="notifications-outline" size={24} color="#ffffff" />
                     {unreadNotifCount > 0 && (
                         <View style={styles.badge}>
@@ -433,6 +436,58 @@ function HomeScreen() {
                 {/* Bottom Spacing for Tab Bar */}
                 <View style={{ height: Platform.OS === 'android' ? Math.max(insets.bottom, 20) + 180 : Math.max(insets.bottom, 20) + 120 }} />
             </ScrollView>
+        {/* Modal Notifikasi */}
+        {showNotifModal && (
+            <View style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.3)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 999,
+            }}>
+                <View style={{
+                    width: '85%',
+                    maxHeight: '70%',
+                    backgroundColor: '#fff',
+                    borderRadius: 16,
+                    padding: 20,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 8,
+                    elevation: 8,
+                }}>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#0097A7', textAlign: 'center' }}>Notifikasi</Text>
+                    
+                    <ScrollView style={{ maxHeight: 350 }}>
+                        
+                        {listNotif.length === 0 ? (
+                            <Text style={{ textAlign: 'center', color: '#6c757d', marginTop: 32 }}>Tidak ada notifikasi</Text>
+                        ) : (
+                            listNotif.map((notif, idx) => (
+                                <View key={notif.id || idx} style={{ marginBottom: 18, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 12 }}>
+                                    <Text style={{ fontWeight: 'bold', color: '#212529', marginBottom: 4 }}>{notif.title || notif.judul || 'Notifikasi'}</Text>
+                                    <Text style={{ color: '#6c757d', marginBottom: 2 }}>{notif.body || notif.pesan || notif.text || '-'}</Text>
+                                    {notif.created_at && (
+                                        <Text style={{ fontSize: 12, color: '#adb5bd' }}>{notif.created_at}</Text>
+                                    )}
+                                </View>
+                            ))
+                        )}
+                    </ScrollView>
+                    <TouchableOpacity
+                        style={{ marginTop: 18, backgroundColor: '#0097A7', paddingVertical: 12, borderRadius: 8 }}
+                        onPress={() => setShowNotifModal(false)}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>Tutup</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        )}
         </View>
     );
 }

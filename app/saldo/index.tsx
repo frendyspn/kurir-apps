@@ -79,7 +79,8 @@ export default function SaldoScreen() {
                         date: item.date || item.created_at?.split(' ')[0] || new Date().toISOString().split('T')[0],
                         time: item.time || item.created_at?.split(' ')[1] || '00:00',
                         status: item.status || 'success',
-                        type: item.type || 'unknown'
+                        type: item.type || 'unknown',
+                        source_id: item.source_id || '',
                     }))
                     : [];
 
@@ -220,6 +221,20 @@ export default function SaldoScreen() {
                             bankName: item.bank_name || 'Bank',
                             accountNumber: item.account_number || '-',
                             accountName: item.account_name || '-',
+                        },
+                    });
+                } else {
+                    // Otherwise, just show details or do nothing
+                    // router.push({
+                    //     pathname: '/saldo/detail',
+                    //     params: {
+                    //         transactionId: item.id,
+                    //     },
+                    // });
+                    router.push({
+                        pathname: '/live-order/detail',
+                        params: {
+                            id: item.source_id,
                         },
                     });
                 }

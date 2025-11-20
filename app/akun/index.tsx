@@ -106,6 +106,7 @@ function AkunScreen() {
                                 <Text style={styles.userBadgeText}>{getUserBadge()?.text}</Text>
                             </View>
                         )}
+                        <Text style={styles.userPhone}>Komisi: {userData?.total_komisi + ' %' || '-'}</Text>
                     </View>
                 </View>
 

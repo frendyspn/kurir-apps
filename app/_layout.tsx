@@ -11,6 +11,7 @@ import InAppNotification from "@/components/InAppNotification";
 import messaging from '@react-native-firebase/messaging';
 import { useEffect, useState } from "react";
 
+import { Linking } from 'react-native';
 import { notificationEvents } from '../utils/notificationEvents';
 
 export const unstable_settings = {
@@ -83,6 +84,7 @@ export default function RootLayout() {
                     onPress={() => {
                         console.log("User clicked notif!", notif.data);
                         setNotif((p) => ({ ...p, visible: false }));
+                        notif.data?.transaction_id && notif.data?.navigate_to  && Linking.openURL(`mitra-klikquick://${notif.data?.navigate_to}/${notif.data.transaction_id}`);
                     }}
                 />
                 <Stack>
