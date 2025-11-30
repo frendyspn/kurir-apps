@@ -7,6 +7,15 @@ interface ApiResponse<T = any> {
 }
 
 class ApiService {
+    // List pelanggan favorit
+    async listFavoriteKonsumen(id_konsumen: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('id_konsumen', id_konsumen);
+        return this.request(API_ENDPOINTS.LIST_FAVORITE_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
     private async request<T>(
         url: string,
         options: RequestInit = {}
@@ -335,16 +344,19 @@ class ApiService {
         nama_pelanggan?: string;
         nama_layanan: string;
         alamat_penjemputan: string;
+        titik_jemput: string;
         alamat_tujuan: string;
+        titik_antar: string;
         biaya_antar: string;
         nama_toko?: string;
         agen_kurir: string;
         tanggal_order: string;
         btn_simpan: string;
         no_hp: string;
+        is_favorite?: string;
     }): Promise<ApiResponse> {
         const formData = new FormData();
-
+        console.log(data);
         formData.append('no_hp_pelanggan', data.no_hp_pelanggan);
         if (data.no_hp_pelanggan_baru) {
             formData.append('no_hp_pelanggan_baru', data.no_hp_pelanggan_baru);
@@ -354,7 +366,9 @@ class ApiService {
         }
         formData.append('nama_layanan', data.nama_layanan);
         formData.append('alamat_penjemputan', data.alamat_penjemputan);
+        formData.append('titik_jemput', data.titik_jemput);
         formData.append('alamat_tujuan', data.alamat_tujuan);
+        formData.append('titik_antar', data.titik_antar);
         formData.append('biaya_antar', data.biaya_antar);
         if (data.nama_toko) {
             formData.append('nama_toko', data.nama_toko);
@@ -363,6 +377,9 @@ class ApiService {
         formData.append('tanggal_order', data.tanggal_order);
         formData.append('btn_simpan', data.btn_simpan);
         formData.append('no_hp', data.no_hp);
+        if (data.is_favorite !== undefined) {
+            formData.append('is_favorite', data.is_favorite ? '1' : '0');
+        }
 
         return this.request(API_ENDPOINTS.TAMBAH_TRANSAKSI_MANUAL, {
             method: 'POST',
@@ -827,6 +844,7 @@ class ApiService {
         tanggal_order: string;
         btn_simpan: string;
         no_hp: string;
+        is_favorite: boolean;
         produk?: Array<{
             nama_barang: string;
             qty: string;
@@ -856,6 +874,7 @@ class ApiService {
         formData.append('tanggal_order', data.tanggal_order);
         formData.append('btn_simpan', data.btn_simpan);
         formData.append('no_hp', data.no_hp);
+        formData.append('is_favorite', data.is_favorite ? '1' : '0');
 
         // Add produk data for FOOD/SHOP services
         if (data.produk && data.produk.length > 0) {

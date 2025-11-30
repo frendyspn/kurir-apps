@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Memoized Transaksi Item Component
@@ -17,7 +17,7 @@ const TransaksiItem = memo(({ item, onPress }: { item: any; onPress: (item: any)
     }, [item, onPress]);
 
     return (
-        <TouchableOpacity 
+        <TouchableOpacity
             style={styles.transaksiItem}
             activeOpacity={0.7}
             onPress={handlePress}
@@ -89,11 +89,11 @@ export default function TransaksiManualScreen() {
     const [loadingTransaksi, setLoadingTransaksi] = useState<boolean>(false);
     const [transaksiList, setTransaksiList] = useState<any[]>([]);
     const [userData, setUserData] = useState<any>(null);
-    
+
     // Modal states
     const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
     const [selectedTransaksi, setSelectedTransaksi] = useState<any>(null);
-    
+
     // Use ref to track if initial load is done
     const isInitialLoad = useRef(true);
 
@@ -131,7 +131,7 @@ export default function TransaksiManualScreen() {
                 isInitialLoad.current = false;
                 return;
             }
-            
+
             const refreshData = async () => {
                 const data = await AsyncStorage.getItem('userData');
                 if (data) {
@@ -141,7 +141,7 @@ export default function TransaksiManualScreen() {
                     }
                 }
             };
-            
+
             refreshData();
         }, [])
     );
@@ -150,7 +150,7 @@ export default function TransaksiManualScreen() {
         const data = await AsyncStorage.getItem('userData');
         if (data) {
             const parsedData = JSON.parse(data);
-            
+
             setUserData(parsedData);
             // Fetch transaksi on load
             fetchTransaksi(parsedData.no_hp);
@@ -161,12 +161,12 @@ export default function TransaksiManualScreen() {
         try {
             setLoading(true);
             const response = await apiService.getJenisLayanan();
-            
+
             if (response.success && response.data && response.data.data) {
                 // Data is nested: response.data.data contains {ride, send, food, shop}
                 const servicesData = response.data.data;
                 const dataArray = Object.values(servicesData) as any[];
-                
+
                 const options = [
                     { label: 'Semua Layanan', value: '' },
                     ...dataArray.map((item: any) => ({
@@ -174,7 +174,7 @@ export default function TransaksiManualScreen() {
                         value: item.key,
                     }))
                 ];
-                
+
                 setServiceTypeOptions(options);
             }
         } catch (error) {
@@ -193,11 +193,11 @@ export default function TransaksiManualScreen() {
     }) => {
         try {
             setLoadingTransaksi(true);
-            
+
             // Use current state values if filters not provided
             const currentStartDate = filters?.startDate || formatDate(startDate);
             const currentEndDate = filters?.endDate || formatDate(endDate);
-            
+
             const response = await apiService.getListTransaksiManual(
                 phoneNumber,
                 currentStartDate,
@@ -210,13 +210,13 @@ export default function TransaksiManualScreen() {
             if (response.success && response.data) {
                 // response.data.data is the array
                 let dataArray = [];
-                
+
                 if (response.data.data && Array.isArray(response.data.data)) {
                     dataArray = response.data.data;
                 } else if (Array.isArray(response.data)) {
                     dataArray = response.data;
                 }
-                
+
                 setTransaksiList(dataArray);
             } else {
                 setTransaksiList([]);
@@ -244,7 +244,7 @@ export default function TransaksiManualScreen() {
     const handleApplyFilter = () => {
         const formattedStartDate = formatDate(startDate);
         const formattedEndDate = formatDate(endDate);
-        
+
         console.log('Apply filter:', {
             startDate: formattedStartDate,
             endDate: formattedEndDate,
@@ -252,7 +252,7 @@ export default function TransaksiManualScreen() {
             serviceType,
             searchQuery
         });
-        
+
         // Fetch data dengan filter
         if (userData?.no_hp) {
             fetchTransaksi(userData.no_hp, {
@@ -263,7 +263,7 @@ export default function TransaksiManualScreen() {
                 searchQuery
             });
         }
-        
+
         setIsFilterExpanded(false);
     };
 
@@ -278,31 +278,31 @@ export default function TransaksiManualScreen() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.backButton}
                     onPress={() => router.back()}
                 >
                     <Ionicons name="arrow-back" size={24} color="#ffffff" />
                 </TouchableOpacity>
-                
+
                 <Text style={styles.headerTitle}>Pasca Order</Text>
-                
-                <TouchableOpacity 
+
+                {/* <TouchableOpacity
                     style={styles.addButton}
                     onPress={() => router.push('/transaksi-manual/tambah')}
                 >
                     <Ionicons name="add-circle-outline" size={28} color="#ffffff" />
-                </TouchableOpacity>
+                </TouchableOpacity> */}
             </View>
 
             {/* Content */}
-            <ScrollView 
+            <ScrollView
                 style={styles.content}
                 contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 120 }}
             >
                 {/* Filter Section */}
                 <View style={styles.filterSection}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.filterHeader}
                         onPress={() => setIsFilterExpanded(!isFilterExpanded)}
                         activeOpacity={0.7}
@@ -311,13 +311,13 @@ export default function TransaksiManualScreen() {
                             <Ionicons name="funnel-outline" size={20} color="#0097A7" />
                             <Text style={styles.filterTitle}>Filter Transaksi</Text>
                         </View>
-                        <Ionicons 
-                            name={isFilterExpanded ? "chevron-up-outline" : "chevron-down-outline"} 
-                            size={20} 
-                            color="#6c757d" 
+                        <Ionicons
+                            name={isFilterExpanded ? "chevron-up-outline" : "chevron-down-outline"}
+                            size={20}
+                            color="#6c757d"
                         />
                     </TouchableOpacity>
-                    
+
                     {isFilterExpanded && (
                         <View style={styles.filterContent}>
                             <DatePickerInput
@@ -358,7 +358,7 @@ export default function TransaksiManualScreen() {
 
                             {/* Filter Action Buttons */}
                             <View style={styles.filterActions}>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.resetButton}
                                     onPress={handleResetFilter}
                                 >
@@ -366,7 +366,7 @@ export default function TransaksiManualScreen() {
                                     <Text style={styles.resetButtonText}>Reset</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.applyButton}
                                     onPress={handleApplyFilter}
                                 >
@@ -400,6 +400,15 @@ export default function TransaksiManualScreen() {
                     )}
                 </View>
             </ScrollView>
+
+            <TouchableOpacity
+                style={styles.fabPascaOrder}
+                onPress={() => router.push('/transaksi-manual/tambah')}
+            >
+                <View style={styles.fabIconContainer}>
+                    <Ionicons name="add-outline" size={32} color="#fff" />
+                </View>
+            </TouchableOpacity>
 
             {/* Modal Detail Transaksi */}
             <Modal
@@ -648,5 +657,36 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: 14,
         color: '#6c757d',
+    },
+
+    fabPascaOrder: {
+        position: 'absolute',
+        right: 15,
+        bottom: Platform.OS === 'android' ? 70 : 74,
+        borderRadius: 32,
+        flexDirection: 'column',
+        alignItems: 'center',
+        paddingVertical: 5,
+        paddingHorizontal: 5,
+        zIndex: 100,
+    },
+    fabIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#0097A7',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    fabText: {
+        fontWeight: 'bold',
+        fontSize: 10,
+        color: 'rgba(0,151,167,0.95)',
     },
 });

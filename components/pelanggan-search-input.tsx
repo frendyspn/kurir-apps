@@ -1,7 +1,7 @@
 import { apiService } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator, Alert, Modal,
     ScrollView,
@@ -16,7 +16,7 @@ import Input from './input';
 interface PelangganSearchInputProps {
     label: string;
     value: string;
-    onChange: (value: string) => void;
+    onChange: (value: string, label: string, data?: { id_konsumen: string, nama_lengkap: string, no_hp: string, is_favorite?: boolean, is_favorite_list?: boolean }) => void;
     onSearch: (query: string) => Promise<void>;
     onClearResults?: () => void;
     options: Array<{ label: string; value: string }>;
@@ -44,6 +44,46 @@ export default function PelangganSearchInput({
     const [namaBaru, setNamaBaru] = useState('');
     const [noHpBaru, setNoHpBaru] = useState('');
     const [loadingTambah, setLoadingTambah] = useState(false);
+    const [favoriteOptions, setFavoriteOptions] = useState<Array<{ label: string; value: string; no_hp: string; is_favorite?: boolean; is_favorite_list?: boolean }>>([]);
+    const [loadingFavorite, setLoadingFavorite] = useState(false);
+    // Fetch pelanggan favorit saat modal dibuka
+    useEffect(() => {
+        const fetchFavorite = async () => {
+            if (!modalVisible) return;
+            setLoadingFavorite(true);
+            try {
+                const userData = await AsyncStorage.getItem('userData');
+                let id_konsumen = '';
+                if (userData) {
+                    try {
+                        const user = JSON.parse(userData);
+                        id_konsumen = user.id_konsumen || '';
+                    } catch {}
+                }
+                if (id_konsumen) {
+                    // Panggil API untuk list pelanggan favorit
+                    const result = await apiService.listFavoriteKonsumen(id_konsumen);
+                    console.log('Favorite Konsumen API result:', result.data.data);
+                    if (result.success && Array.isArray(result.data.data)) {
+                        setFavoriteOptions(result.data.data.map((item: any) => ({
+                            label: item.nama_lengkap || item.nama || item.no_hp,
+                            value: item.id_konsumen || item.id,
+                            no_hp: item.no_hp || '',
+                            is_favorite: item.is_favorite ?? true,
+                            is_favorite_list: true,
+                        })));
+                    } else {
+                        setFavoriteOptions([]);
+                    }
+                }
+            } catch {
+                setFavoriteOptions([]);
+            } finally {
+                setLoadingFavorite(false);
+            }
+        };
+        fetchFavorite();
+    }, [modalVisible]);
 
     const handleSearch = async () => {
         if (searchQuery.trim()) {
@@ -54,10 +94,36 @@ export default function PelangganSearchInput({
     };
 
     const handleSelect = (selectedValue: string, selectedLabel: string) => {
-        onChange(selectedValue);
+        // Cari data dari favoriteOptions jika ada
+        const fav = favoriteOptions.find(opt => opt.value === selectedValue);
+        if (fav && fav.no_hp) {
+            onChange(selectedValue, selectedLabel, {
+                id_konsumen: fav.value,
+                nama_lengkap: fav.label,
+                no_hp: fav.no_hp,
+                is_favorite: fav.is_favorite ?? true,
+                is_favorite_list: true,
+            });
+        } else {
+            // Cek jika data hasil pencarian punya properti is_favorite/is_favorite_list
+            const searchOpt = options.find(opt => opt.value === selectedValue);
+            if (searchOpt && (searchOpt as any).data) {
+                const d = (searchOpt as any).data;
+                onChange(selectedValue, selectedLabel, {
+                    id_konsumen: d.id_konsumen || d.id,
+                    nama_lengkap: d.nama_lengkap || d.nama || d.no_hp,
+                    no_hp: d.no_hp || '',
+                    is_favorite: d.is_favorite,
+                    is_favorite_list: d.is_favorite_list,
+                });
+            } else {
+                onChange(selectedValue, selectedLabel);
+            }
+        }
         setModalVisible(false);
         setSearchQuery('');
         setShowTambahForm(false);
+        console.log('Selected pelanggan:', selectedValue, selectedLabel);
     };
 
     const handleCloseModal = () => {
@@ -105,7 +171,7 @@ export default function PelangganSearchInput({
             });
             if (result.success && result.data) {
                 // Pilih pelanggan baru otomatis
-                onChange(result.data.id_konsumen || result.data.id);
+                onChange(result.data.id_konsumen || result.data.id, result.data.nama_lengkap || result.data.nama || result.data.no_hp);
                 setModalVisible(false);
                 setSearchQuery('');
                 setShowTambahForm(false);
@@ -233,9 +299,52 @@ export default function PelangganSearchInput({
                             </View>
                         )}
 
-                        {/* Results */}
+                        {/* Results & Favorite */}
                         {!showTambahForm && (
                             <ScrollView style={styles.optionsList}>
+                                {/* Pelanggan Favorit */}
+                                {loadingFavorite ? (
+                                    <View style={styles.loadingContainer}>
+                                        <ActivityIndicator size="small" color="#0097A7" />
+                                        <Text style={styles.loadingText}>Memuat pelanggan favorit...</Text>
+                                    </View>
+                                ) : favoriteOptions.length > 0 ? (
+                                    <>
+                                        <Text style={styles.resultCount}>Pelanggan Favorit</Text>
+                                        {favoriteOptions.map((option, index) => (
+                                            <TouchableOpacity
+                                                key={`fav-${option.value}-${index}`}
+                                                style={[
+                                                    styles.option,
+                                                    value === option.value && styles.selectedOption,
+                                                ]}
+                                                onPress={() => handleSelect(option.value, option.label)}
+                                            >
+                                                <View style={styles.optionContent}>
+                                                    <Ionicons 
+                                                        name="star" 
+                                                        size={24} 
+                                                        color="#ffc107" 
+                                                    />
+                                                    <Text
+                                                        style={[
+                                                            styles.optionText,
+                                                            value === option.value && styles.selectedOptionText,
+                                                        ]}
+                                                    >
+                                                        {option.label}
+                                                    </Text>
+                                                </View>
+                                                {value === option.value && (
+                                                    <Ionicons name="checkmark-circle" size={24} color="#0097A7" />
+                                                )}
+                                            </TouchableOpacity>
+                                        ))}
+                                        <View style={{ height: 12 }} />
+                                    </>
+                                ) : null}
+
+                                {/* Hasil Pencarian */}
                                 {(() => {
                                     if (isSearching) {
                                         return (

@@ -1,4 +1,5 @@
 import DatePickerInput from '@/components/date-picker-input';
+import DropdownInput from '@/components/dropdown-input';
 import PelangganSearchInput from '@/components/pelanggan-search-input';
 import { apiService } from '@/services/api';
 import socketService from '@/services/socket';
@@ -17,7 +18,9 @@ export default function TambahTransaksiScreen() {
     const [agenKurir, setAgenKurir] = useState<string>('');
     const [pelanggan, setPelanggan] = useState<string>('');
     const [pelangganLabel, setPelangganLabel] = useState<string>('');
-    const [pelangganData, setPelangganData] = useState<any>(null);
+    const [pelangganData, setPelangganData] = useState<{ id_konsumen?: string; nama_lengkap?: string; no_hp?: string; is_favorite?: boolean; is_favorite_list?: boolean } | null>(null);
+    // State untuk status pelanggan otomatis (favorite)
+    const [isOtomatis, setIsOtomatis] = useState<boolean>(false);
     const [layanan, setLayanan] = useState<string>('');
     const [alamatJemput, setAlamatJemput] = useState<string>('');
     const [alamatAntar, setAlamatAntar] = useState<string>('');
@@ -40,7 +43,7 @@ export default function TambahTransaksiScreen() {
     const [showProdukModal, setShowProdukModal] = useState(false);
     const [editingProdukIndex, setEditingProdukIndex] = useState<number | null>(null);
     const [agenOptions, setAgenOptions] = useState<Array<{ label: string; value: string }>>([]);
-    const [pelangganOptions, setPelangganOptions] = useState<Array<{ label: string; value: string }>>([]);
+    const [pelangganOptions, setPelangganOptions] = useState<Array<{ label: string; value: string; no_hp?: string; data?: any }>>([]);
     const [layananOptions, setLayananOptions] = useState<Array<{ label: string; value: string }>>([]);
     
     // Loading state for dropdowns
@@ -101,6 +104,11 @@ export default function TambahTransaksiScreen() {
                     }));
                     
                     setAgenOptions(options);
+
+                    const foundAgen = agentData.find((item: any) => item.id_konsumen === user.id_konsumen);
+                    if (foundAgen) {
+                        setAgenKurir(foundAgen.id_konsumen);
+                    }
                 } else {
                     console.error('Agent data is not an array:', agentData);
                 }
@@ -116,26 +124,22 @@ export default function TambahTransaksiScreen() {
         try {
             setLoadingPelanggan(true);
             setPelangganOptions([]);
-            
             const userData = await AsyncStorage.getItem('userData');
             if (!userData) {
                 console.error('No user data found');
                 return;
             }
-
             const user = JSON.parse(userData);
             const response = await apiService.getListPelanggan(user.no_hp, query);
-            
             if (response.success && response.data && response.data.data) {
                 const pelangganData = response.data.data;
-                
                 if (Array.isArray(pelangganData)) {
                     const options = pelangganData.map((item: any) => ({
                         label: item.nama_lengkap + ' (' + item.no_hp + ')',
                         value: item.id_konsumen || item.id,
-                        data: item, // Store full data
+                        no_hp: item.no_hp,
+                        data: item,
                     }));
-                    
                     setPelangganOptions(options);
                 } else {
                     console.error('Pelanggan data is not an array:', pelangganData);
@@ -148,14 +152,30 @@ export default function TambahTransaksiScreen() {
         }
     };
 
-    const handlePelangganChange = (value: string) => {
+    // Accept (value, label, data) from child, set full customer data
+    // Handler untuk pelanggan, menerima value, label, dan data
+    const handlePelangganChange = (
+        value: string,
+        label: string,
+        data?: { id_konsumen: string; nama_lengkap: string; no_hp: string; is_favorite?: boolean; is_favorite_list?: boolean }
+    ) => {
         setPelanggan(value);
-        // Find and set the label and full data
-        const selected = pelangganOptions.find(opt => opt.value === value);
-        if (selected) {
-            setPelangganLabel(selected.label);
-            setPelangganData((selected as any).data);
+        setPelangganLabel(label);
+        let otomatis = false;
+        if (data) {
+            setPelangganData({
+                id_konsumen: data.id_konsumen || value,
+                nama_lengkap: data.nama_lengkap || label,
+                no_hp: data.no_hp || '',
+                is_favorite: data.is_favorite,
+                is_favorite_list: data.is_favorite_list,
+            });
+            // Pelanggan otomatis jika berasal dari daftar favorite (is_favorite_list true)
+            otomatis = !!data.is_favorite_list;
+        } else {
+            setPelangganData(null);
         }
+        setIsOtomatis(otomatis);
     };
 
     const handleClearPelangganResults = () => {
@@ -305,21 +325,22 @@ export default function TambahTransaksiScreen() {
 
         try {
             setLoading(true);
-            
             // Get user data for API call
             const userData = await AsyncStorage.getItem('userData');
             if (!userData) {
                 alert('Data user tidak ditemukan. Silakan login kembali.');
                 return;
             }
-            
             const user = JSON.parse(userData);
-            
             // Prepare data for API call
             const apiOrderData = {
-                no_hp_pelanggan: selectedCustomer ? JSON.parse(selectedCustomer).no_hp : pelanggan,
-                no_hp_pelanggan_baru: selectedCustomer ? undefined : pelanggan,
-                nama_pelanggan: selectedCustomer ? JSON.parse(selectedCustomer).nama_lengkap : undefined,
+                no_hp_pelanggan: selectedCustomer
+                    ? JSON.parse(selectedCustomer).no_hp
+                    : pelangganData?.no_hp || pelanggan,
+                no_hp_pelanggan_baru: selectedCustomer ? undefined : pelangganData?.no_hp || pelanggan,
+                nama_pelanggan: selectedCustomer
+                    ? JSON.parse(selectedCustomer).nama_lengkap
+                    : pelangganData?.nama_lengkap || pelangganLabel,
                 nama_layanan: layanan,
                 alamat_penjemputan: alamatJemput,
                 link_maps_penjemputan: linkMapsPenjemputan,
@@ -332,6 +353,7 @@ export default function TambahTransaksiScreen() {
                 btn_simpan: 'create',
                 no_hp: user.no_hp,
                 produk: (layanan === 'FOOD' || layanan === 'SHOP') ? produkList : undefined,
+                is_favorite: isOtomatis,
             };
 
             console.log('📤 Creating order via API:', apiOrderData);
@@ -411,7 +433,7 @@ export default function TambahTransaksiScreen() {
                     />
 
                     {/* Agen Kurir */}
-                    {/* {loadingAgen ? (
+                    {loadingAgen ? (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="small" color="#0097A7" />
                             <Text style={styles.loadingText}>Memuat agen...</Text>
@@ -424,8 +446,8 @@ export default function TambahTransaksiScreen() {
                             options={agenOptions}
                             placeholder="Pilih agen kurir"
                         />
-                    )} */}
-
+                    )}
+                    
                     {/* Pelanggan */}
                     {selectedCustomer ? (
                         <View style={styles.inputContainer}>
@@ -439,6 +461,7 @@ export default function TambahTransaksiScreen() {
                             </View>
                         </View>
                     ) : (
+                        <>
                         <PelangganSearchInput
                             label="Pelanggan"
                             value={pelanggan}
@@ -451,6 +474,20 @@ export default function TambahTransaksiScreen() {
                             selectedLabel={pelangganLabel}
                             isSearching={loadingPelanggan}
                         />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                            <TouchableOpacity
+                                style={{ marginRight: 8 }}
+                                onPress={() => setIsOtomatis(!isOtomatis)}
+                            >
+                                <Ionicons
+                                    name={isOtomatis ? 'checkbox' : 'square-outline'}
+                                    size={20}
+                                    color={isOtomatis ? '#0097A7' : '#adb5bd'}
+                                />
+                            </TouchableOpacity>
+                            <Text style={styles.selectedCustomerNote}>Pelanggan Favorite</Text>
+                        </View>
+                        </>
                     )}
 
                     {/* Layanan */}

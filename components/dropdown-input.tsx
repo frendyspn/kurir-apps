@@ -2,7 +2,7 @@
 // --- KODE BARU DIMULAI DI SINI ---
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Animated, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface DropdownOption {
     label: string;
@@ -22,8 +22,14 @@ interface DropdownInputProps {
 const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, options, placeholder, error, disabled }) => {
     const [showModal, setShowModal] = useState(false);
     const overlayOpacity = useState(new Animated.Value(0))[0];
+    const [searchText, setSearchText] = useState('');
 
     const selectedOption = options.find(opt => opt.value === value);
+
+    // Filter options by searchText
+    const filteredOptions = options.filter(opt =>
+        opt.label.toLowerCase().includes(searchText.toLowerCase())
+    );
 
     const handleOpenModal = () => {
         setShowModal(true);
@@ -41,6 +47,7 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
             useNativeDriver: true,
         }).start(() => {
             setShowModal(false);
+            setSearchText(''); // Reset search on close
         });
     };
 
@@ -99,9 +106,21 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                                     <Ionicons name="close" size={24} color="#212529" />
                                 </TouchableOpacity>
                             </View>
-                            {options.length < 3 ? (
+                            {/* Search input */}
+                            <View style={styles.searchContainer}>
+                                <Ionicons name="search" size={18} color="#adb5bd" style={{ marginRight: 6 }} />
+                                <TextInput
+                                    style={styles.searchInput}
+                                    value={searchText}
+                                    onChangeText={setSearchText}
+                                    placeholder="Cari..."
+                                    placeholderTextColor="#adb5bd"
+                                    autoFocus={true}
+                                />
+                            </View>
+                            {filteredOptions.length < 3 ? (
                                 <View style={styles.nonScrollList}>
-                                    {options.map((option, index) => (
+                                    {filteredOptions.map((option, index) => (
                                         <TouchableOpacity
                                             key={`${option.value}-${index}`}
                                             style={[
@@ -126,10 +145,13 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                                             )}
                                         </TouchableOpacity>
                                     ))}
+                                    {filteredOptions.length === 0 && (
+                                        <Text style={styles.emptyText}>Tidak ada hasil</Text>
+                                    )}
                                 </View>
                             ) : (
                                 <ScrollView style={styles.optionsList}>
-                                    {options.map((option, index) => (
+                                    {filteredOptions.map((option, index) => (
                                         <TouchableOpacity
                                             key={`${option.value}-${index}`}
                                             style={[
@@ -154,6 +176,9 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                                             )}
                                         </TouchableOpacity>
                                     ))}
+                                    {filteredOptions.length === 0 && (
+                                        <Text style={styles.emptyText}>Tidak ada hasil</Text>
+                                    )}
                                 </ScrollView>
                             )}
                         </View>
@@ -288,5 +313,29 @@ const styles = StyleSheet.create({
     optionTextSelected: {
         color: '#0097A7',
         fontWeight: '600',
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#dee2e6',
+        paddingHorizontal: 10,
+        margin: 12,
+        marginBottom: 10,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: '#212529',
+        paddingVertical: 8,
+        backgroundColor: 'transparent',
+    },
+    emptyText: {
+        textAlign: 'center',
+        color: '#adb5bd',
+        fontSize: 14,
+        marginVertical: 16,
     },
 });

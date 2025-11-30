@@ -74,12 +74,27 @@ function HomeScreen() {
         try {
             const data = await AsyncStorage.getItem('userData');
             if (data) {
-                const parsedData = JSON.parse(data);
+                let parsedData = JSON.parse(data);
                 console.log('🔍 USER DATA FROM ASYNCSTORAGE:', parsedData);
                 console.log('🔍 USER ROLE:', parsedData.role);
                 console.log('🔍 USER AGEN:', parsedData.agen);
                 console.log('🔍 USER NO_HP:', parsedData.no_hp);
                 console.log('🔍 USER NAME:', parsedData.name);
+
+                // Fetch latest sopir status from API
+                try {
+                    const statusRes = await apiService.cekStatusSopir(parsedData.no_hp);
+                    if (statusRes.success && statusRes.data) {
+                        // Merge status data into userData
+                        parsedData = { ...parsedData, ...statusRes.data.data };
+                        // Save updated userData to AsyncStorage
+                        await AsyncStorage.setItem('userData', JSON.stringify(parsedData));
+                        console.log('✅ Updated userData with sopir status:', parsedData);
+                    }
+                } catch (err) {
+                    console.error('❌ Error fetching sopir status:', err);
+                }
+
                 setUserData(parsedData);
                 // Fetch balance after getting user data
                 await fetchBalance(parsedData.no_hp);
@@ -436,6 +451,8 @@ function HomeScreen() {
                 {/* Bottom Spacing for Tab Bar */}
                 <View style={{ height: Platform.OS === 'android' ? Math.max(insets.bottom, 20) + 180 : Math.max(insets.bottom, 20) + 120 }} />
             </ScrollView>
+            {/* Floating Live Order button for agent, always visible */}
+            
         {/* Modal Notifikasi */}
         {showNotifModal && (
             <View style={{
@@ -493,6 +510,63 @@ function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+    fabLiveOrder: {
+        position: 'absolute',
+        right: 15,
+        bottom: Platform.OS === 'android' ? 130 : 135,
+        // backgroundColor: 'rgba(0,151,167,0.95)',
+        borderRadius: 32,
+        flexDirection: 'column',
+        alignItems: 'center',
+        paddingVertical: 5,
+        paddingHorizontal: 5,
+        // elevation: 16,
+        // shadowColor: '#000',
+        // shadowOffset: { width: 0, height: 8 },
+        // shadowOpacity: 0.35,
+        // shadowRadius: 16,
+        zIndex: 100,
+        // borderWidth: 2,
+        // borderColor: 'rgba(255,255,255,0.7)',
+    },
+    fabPascaOrder: {
+        position: 'absolute',
+        right: 15,
+        bottom: Platform.OS === 'android' ? 60 : 64,
+        // backgroundColor: 'rgba(0,151,167,0.95)',
+        borderRadius: 32,
+        flexDirection: 'column',
+        alignItems: 'center',
+        paddingVertical: 5,
+        paddingHorizontal: 5,
+        // elevation: 16,
+        // shadowColor: '#000',
+        // shadowOffset: { width: 0, height: 8 },
+        // shadowOpacity: 0.35,
+        // shadowRadius: 16,
+        zIndex: 100,
+        // borderWidth: 2,
+        // borderColor: 'rgba(255,255,255,0.7)',
+    },
+    fabIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#0097A7',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    fabText: {
+        fontWeight: 'bold',
+        fontSize: 10,
+        color: 'rgba(0,151,167,0.95)',
+    },
     container: {
         flex: 1,
         backgroundColor: '#f8f9fa',

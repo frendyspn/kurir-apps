@@ -51,10 +51,12 @@ function AkunScreen() {
 
     // Get user badge based on user data
     const getUserBadge = useCallback(() => {
-        if (userData?.agen === '1') return { text: 'Agen', color: '#28a745' };
-        if (userData?.koordinator_kota === '1') return { text: 'Koordinator Kota', color: '#007bff' };
-        if (userData?.koordinator_kecamatan === '1') return { text: 'Koordinator Kecamatan', color: '#6f42c1' };
-        return null;
+    console.log('User data for badge:', userData);
+    const badges = [];
+    if (userData?.agen === '1') badges.push({ text: 'Agen', color: '#28a745' });
+    if (userData?.koordinator_kota === '1') badges.push({ text: 'Koordinator Kota', color: '#007bff' });
+    if (userData?.koordinator_kecamatan === '1') badges.push({ text: 'Koordinator Kurir', color: '#6f42c1' });
+    return badges.length > 0 ? badges : null;
     }, [userData]);
 
     // Menu items for account screen
@@ -101,9 +103,13 @@ function AkunScreen() {
                     <View style={styles.userInfo}>
                         <Text style={styles.userName}>{userData?.nama_lengkap || 'Nama Lengkap'}</Text>
                         <Text style={styles.userPhone}>{userData?.no_hp || 'No HP'}</Text>
-                        {getUserBadge() && (
-                            <View style={[styles.userBadge, { backgroundColor: getUserBadge()?.color }]}>
-                                <Text style={styles.userBadgeText}>{getUserBadge()?.text}</Text>
+                        {Array.isArray(getUserBadge()) && getUserBadge()!.length > 0 && (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 1, marginBottom: 2 }}>
+                                {getUserBadge()!.map((badge, idx) => (
+                                    <View key={idx} style={[styles.userBadge, { backgroundColor: badge.color }]}> 
+                                        <Text style={styles.userBadgeText}>{badge.text}</Text>
+                                    </View>
+                                ))}
                             </View>
                         )}
                         <Text style={styles.userPhone}>Komisi: {userData?.total_komisi + ' %' || '-'}</Text>

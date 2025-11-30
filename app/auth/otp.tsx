@@ -12,7 +12,8 @@ export default function OtpScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const phoneNumber = params.phone as string;
-    const [otpDev, setOtpDev] = useState(params.otp as string | undefined);
+    const [otpDev, setOtpDev] = useState('');
+    // const [otpDev, setOtpDev] = useState(params.otp as string | undefined);
 
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
@@ -97,7 +98,7 @@ export default function OtpScreen() {
             if (result.success) {
                 setResendTimer(60);
                 setCanResend(false);
-                setOtpDev(result.data?.Message);
+                // setOtpDev(result.data?.Message);
                 Alert.alert('Berhasil', 'Kode OTP telah dikirim ulang');
             } else {
                 Alert.alert('Error', result.message || 'Gagal mengirim ulang OTP');

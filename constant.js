@@ -56,6 +56,7 @@ export const API_ENDPOINTS = {
     CHECK_USER_BY_PHONE: `${API_BASE_URL}/kurir/v1/check_user_by_phone`,
 
     LOGOUT: `${API_BASE_URL}/kurir/logout`,
+    LIST_FAVORITE_KONSUMEN: `${API_BASE_URL}/kurir/v1/list-favorite-pelanggan`,
     // Kurir Orders
     GET_AVAILABLE_KURIR_ORDERS: `${API_BASE_URL}/kurir/v1/kurir-orders/available`,
     GET_NOTIFICATION_ENDPOINT: `${API_BASE_URL}/kurir/v1/notifications`,

@@ -911,7 +911,10 @@ const TransaksiDetailModal = memo(({
                                     <TouchableOpacity
                                         style={[styles.contactButton, { backgroundColor: '#25D366', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }]}
                                         onPress={() => {
-                                            const phone = currentTransaksi.no_hp_pemesan;
+                                            let phone = currentTransaksi.no_hp_pemesan;
+                                            if (phone && phone.startsWith('08')) {
+                                                phone = '628' + phone.slice(2);
+                                            }
                                             if (phone) {
                                                 const url = `https://wa.me/${phone.replace(/[^0-9]/g, '')}`;
                                                 Linking.openURL(url);
@@ -942,6 +945,43 @@ const TransaksiDetailModal = memo(({
                                 <Text style={styles.infoValue}>{currentTransaksi.no_hp_pemesan || '-'}</Text>
                             </View>
                         )}
+                    </View>
+
+
+                    {/* Customer Info */}
+                    <View style={styles.modalSection}>
+                        <View style={styles.modalSectionHeader}>
+                            <Ionicons name="person-outline" size={20} color="#0097A7" />
+                            <Text style={styles.modalSectionTitle}>Informasi Kurir</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Nama Kurir</Text>
+                            <Text style={styles.infoValue}>{currentTransaksi.nama_kurir || '-'}</Text>
+                        </View>
+                        <View style={styles.modalDivider} />
+                        <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>No. HP</Text>
+                                <Text style={styles.infoValue}>{currentTransaksi.no_hp_kurir || '-'}</Text>
+                            </View>
+                        
+                    </View>
+
+                    {/* Customer Info */}
+                    <View style={styles.modalSection}>
+                        <View style={styles.modalSectionHeader}>
+                            <Ionicons name="person-outline" size={20} color="#0097A7" />
+                            <Text style={styles.modalSectionTitle}>Informasi Agen</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Nama Agen</Text>
+                            <Text style={styles.infoValue}>{currentTransaksi.nama_agen || '-'}</Text>
+                        </View>
+                        <View style={styles.modalDivider} />
+                        <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>No. HP</Text>
+                                <Text style={styles.infoValue}>{currentTransaksi.no_hp_agen || '-'}</Text>
+                            </View>
+                        
                     </View>
 
                 {/* Products Info - Show if id_penjualan exists */}

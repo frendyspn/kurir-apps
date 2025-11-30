@@ -18,11 +18,15 @@ export default function TambahTransaksiScreen() {
     const [pelanggan, setPelanggan] = useState<string>('');
     const [pelangganLabel, setPelangganLabel] = useState<string>('');
     const [pelangganData, setPelangganData] = useState<any>(null);
+    // State untuk status pelanggan otomatis
+    const [isOtomatis, setIsOtomatis] = useState<boolean>(false);
     const [layanan, setLayanan] = useState<string>('');
     const [alamatJemput, setAlamatJemput] = useState<string>('');
     const [alamatAntar, setAlamatAntar] = useState<string>('');
     const [biayaAntar, setBiayaAntar] = useState<string>('');
     const [namaRestoToko, setNamaRestoToko] = useState<string>('');
+    const [linkMapsPenjemputan, setLinkMapsPenjemputan] = useState<string>('');
+    const [linkMapsAntar, setLinkMapsAntar] = useState<string>('');
     
     // Options state
     const [agenOptions, setAgenOptions] = useState<Array<{ label: string; value: string }>>([]);
@@ -78,15 +82,18 @@ export default function TambahTransaksiScreen() {
 
             if (response.success && response.data && response.data.data) {
                 const agentData = response.data.data;
-                
                 // Check if data is array
                 if (Array.isArray(agentData)) {
                     const options = agentData.map((item: any) => ({
                         label: item.nama_lengkap,
                         value: item.id_konsumen,
                     }));
-                    
                     setAgenOptions(options);
+                    // Otomatis pilih agen jika id_konsumen sama dengan user
+                    const foundAgen = agentData.find((item: any) => item.id_konsumen === user.id_konsumen);
+                    if (foundAgen) {
+                        setAgenKurir(foundAgen.id_konsumen);
+                    }
                 } else {
                     console.error('Agent data is not an array:', agentData);
                 }
@@ -134,14 +141,36 @@ export default function TambahTransaksiScreen() {
         }
     };
 
-    const handlePelangganChange = (value: string) => {
+    // Handler untuk pelanggan, menerima value dan label
+    const handlePelangganChange = (value: string, label: string, data?: { id_konsumen: string, nama_lengkap: string, no_hp: string, is_favorite?: boolean, is_favorite_list?: boolean }) => {
+        console.log('Pelanggan changed:', data);
         setPelanggan(value);
-        // Find and set the label and full data
-        const selected = pelangganOptions.find(opt => opt.value === value);
-        if (selected) {
-            setPelangganLabel(selected.label);
-            setPelangganData((selected as any).data);
+        setPelangganLabel(label);
+        let otomatis = false;
+        if (data) {
+            setPelangganData(data);
+            // Pelanggan otomatis jika berasal dari daftar favorite (is_favorite_list true)
+            otomatis = !!data.is_favorite_list;
+        } else {
+            // Cari data pelanggan dari options jika ada
+            const selected = pelangganOptions.find(opt => opt.value === value);
+            if (selected) {
+                setPelangganData((selected as any).data);
+                otomatis = !!((selected as any).data?.is_favorite_list);
+            } else {
+                // Jika tidak ada data, fallback parsing label
+                let nama = label;
+                let no_hp = '';
+                const match = label.match(/^(.*)\s*\(([^)]+)\)$/);
+                if (match) {
+                    nama = match[1].trim();
+                    no_hp = match[2].trim();
+                }
+                setPelangganData({ id_konsumen: value, nama_lengkap: nama, no_hp });
+                otomatis = false;
+            }
         }
+        setIsOtomatis(otomatis);
     };
 
     const handleClearPelangganResults = () => {
@@ -220,12 +249,15 @@ export default function TambahTransaksiScreen() {
                 no_hp_pelanggan: pelangganData?.no_hp || '-',
                 nama_layanan: layanan,
                 alamat_penjemputan: alamatJemput,
+                titik_jemput: linkMapsPenjemputan,
                 alamat_tujuan: alamatAntar,
+                titik_antar: linkMapsAntar,
                 biaya_antar: biayaAntar,
                 agen_kurir: agenKurir,
                 tanggal_order: formatDateTime(tanggal),
                 btn_simpan: 'create',
                 no_hp: user.no_hp || '',
+                is_favorite: isOtomatis,
             };
 
             // If pelanggan baru (no_hp = '-')
@@ -303,7 +335,7 @@ export default function TambahTransaksiScreen() {
                             placeholder="Pilih agen kurir"
                         />
                     )}
-
+                    
                     {/* Pelanggan */}
                     {selectedCustomer ? (
                         <View style={styles.inputContainer}>
@@ -317,6 +349,7 @@ export default function TambahTransaksiScreen() {
                             </View>
                         </View>
                     ) : (
+                        <>
                         <PelangganSearchInput
                             label="Pelanggan"
                             value={pelanggan}
@@ -329,7 +362,23 @@ export default function TambahTransaksiScreen() {
                             selectedLabel={pelangganLabel}
                             isSearching={loadingPelanggan}
                         />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                            <TouchableOpacity
+                                style={{ marginRight: 8 }}
+                                onPress={() => setIsOtomatis(!isOtomatis)}
+                            >
+                                <Ionicons
+                                    name={isOtomatis ? 'checkbox' : 'square-outline'}
+                                    size={20}
+                                    color={isOtomatis ? '#0097A7' : '#adb5bd'}
+                                />
+                            </TouchableOpacity>
+                            <Text style={styles.selectedCustomerNote}>Pelanggan Favorite</Text>
+                        </View>
+                        </>
                     )}
+
+                    
 
                     {/* Layanan */}
                     <View style={styles.inputContainer}>
@@ -405,6 +454,23 @@ export default function TambahTransaksiScreen() {
                         />
                     </View>
 
+                    {/* Link Maps Penjemputan */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>Link Maps Penjemputan</Text>
+                        <View style={styles.priceInputContainer}>
+                            <TextInput
+                                style={styles.priceInput}
+                                value={linkMapsPenjemputan}
+                                onChangeText={setLinkMapsPenjemputan}
+                                placeholder="Masukkan link maps penjemputan"
+                                placeholderTextColor="#adb5bd"
+                                multiline
+                                numberOfLines={3}
+                                textAlignVertical="top"
+                            />
+                        </View>
+                    </View>
+
                     {/* Alamat Antar */}
                     <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>Alamat Antar *</Text>
@@ -418,6 +484,22 @@ export default function TambahTransaksiScreen() {
                             numberOfLines={3}
                             textAlignVertical="top"
                         />
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>Link Maps Antar</Text>
+                        <View style={styles.priceInputContainer}>
+                            <TextInput
+                                style={styles.priceInput}
+                                value={linkMapsAntar}
+                                onChangeText={setLinkMapsAntar}
+                                placeholder="Masukkan link maps antar"
+                                placeholderTextColor="#adb5bd"
+                                multiline
+                                numberOfLines={3}
+                                textAlignVertical="top"
+                            />
+                        </View>
                     </View>
 
                     {/* Biaya Antar */}
