@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, FlatList, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Clipboard, FlatList, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Contact = {
@@ -22,6 +22,14 @@ export default function DetailKontakScreen() {
 
     // State untuk data kontak yang bisa diupdate
     const [currentContactData, setCurrentContactData] = useState<Contact | null>(initialContactData);
+
+    // Function to copy contact info to clipboard
+    const handleCopyKontak = useCallback(() => {
+        if (!currentContactData) return;
+        const formatted = `${currentContactData.nama_lengkap}\n${currentContactData.no_hp}\n${currentContactData.alamat_lengkap}`;
+        Clipboard.setString(formatted);
+        Alert.alert('Disalin', 'Kontak telah disalin ke clipboard');
+    }, [currentContactData]);
 
     // Update contact data when parameters change (e.g., after editing)
     useEffect(() => {
@@ -245,8 +253,11 @@ export default function DetailKontakScreen() {
             }
 
             const user = JSON.parse(userData);
+            // Get token from userData or import from constants if needed
+            const token = user.token || '';
 
             const response = await apiService.deleteKontak({
+                token,
                 id_konsumen: currentContactData.id_konsumen,
                 no_hp_user: user.no_hp,
             });
@@ -306,6 +317,19 @@ export default function DetailKontakScreen() {
                         onPress={() => setShowMenu(false)}
                     >
                         <View style={styles.menuContainer}>
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={() => {
+                                    setShowMenu(false);
+                                    handleCopyKontak();
+                                }}
+                            >
+                                <Ionicons name="copy-outline" size={20} color="#0097A7" />
+                                <Text style={styles.menuItemText}>Copy Kontak</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.menuDivider} />
+
                             <TouchableOpacity
                                 style={styles.menuItem}
                                 onPress={() => {

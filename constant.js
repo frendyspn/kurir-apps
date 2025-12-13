@@ -2,22 +2,24 @@ import CryptoJS from 'crypto-js';
 
 // Generate token berdasarkan tanggal hari ini
 const generateToken = () => {
+    console.log('Generating API token based on current date');
     const today = new Date();
     const dateString = today.getFullYear() + 
                       String(today.getMonth() + 1).padStart(2, '0') + 
                       String(today.getDate()).padStart(2, '0');
     const rawString = dateString + '#SATUKASIR';
-    
     // Gunakan SHA256 atau hash method yang sesuai dengan backend
     // Pastikan ini sesuai dengan method hash di backend
     return CryptoJS.SHA256(rawString).toString();
+    // return rawString;
 };
 
-export const API_BASE_URL = 'https://api.satutoko.my.id/api';
-export const BROADCAST_URL = 'http://api.satutoko.my.id:6001';
-export const SOCKET_URL = 'http://api.satutoko.my.id:6001';
+// export const API_BASE_URL = 'https://api.satutoko.my.id/api';
+export const API_BASE_URL = 'https://api.depokniaga.com/api';
+export const BROADCAST_URL = 'http://api.depokniaga.com:6001';
+export const SOCKET_URL = 'http://api.depokniaga.com:6001';
 export const API_TOKEN = generateToken();
-export const APP_NAME = 'Mitra KlikQuick';
+export const APP_NAME = 'Depok Niaga';
 
 export const API_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/kurir/login`,

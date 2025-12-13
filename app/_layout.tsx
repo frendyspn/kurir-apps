@@ -82,7 +82,7 @@ export default function RootLayout() {
                         setNotif((p) => ({ ...p, visible: false }))
                     }
                     onPress={() => {
-                        console.log("User clicked notif!", notif.data);
+                        console.log("User clicked notif!", notif);
                         setNotif((p) => ({ ...p, visible: false }));
                         notif.data?.transaction_id && notif.data?.navigate_to  && Linking.openURL(`mitra-klikquick://${notif.data?.navigate_to}/${notif.data.transaction_id}`);
                     }}

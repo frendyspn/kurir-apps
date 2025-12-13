@@ -29,7 +29,7 @@ class ApiService {
                 ...options,
                 headers: {
                     'Authorization': `Bearer ${API_TOKEN}`,
-                    'X-Authorization': `Bearer ${API_TOKEN}`,
+                    // 'X-Authorization': `Bearer ${API_TOKEN}`,
                     ...options.headers,
                 },
                 signal: controller.signal,
@@ -630,7 +630,7 @@ class ApiService {
         formData.append('alamat', data.alamat_lengkap);
         formData.append('no_hp_user', data.no_hp_user);
 
-        return this.request(API_ENDPOINTS.UPDATE_KONSUMEN, {
+        return this.request(API_ENDPOINTS.UPDATE_KONSUMEN_SIMPLE, {
             method: 'POST',
             body: formData,
         });

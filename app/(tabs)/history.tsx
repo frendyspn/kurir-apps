@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,11 +9,32 @@ import PendapatanChart from '../../components/charts/pendapatan-chart';
 import TransactionList from '../../components/transaction-list';
 import { apiService } from '../../services/api';
 
-type PeriodeType = 'harian' | 'bulanan';
+type PeriodeType = 'harian' | 'bulanan' | 'custom';
 type OrderType = 'semua' | 'pasca_order' | 'live_order';
 type ReportType = 'chart' | 'list';
 
 function HistoryScreen() {
+    // Date picker modal state
+    const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+    const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+    // Handler for date picker
+    const handleStartDateChange = (event: any, selectedDate?: Date) => {
+        setShowStartDatePicker(false);
+        if (selectedDate) {
+            const isoDate = selectedDate.toISOString().split('T')[0];
+            setCustomStartDate(isoDate);
+        }
+    };
+    const handleEndDateChange = (event: any, selectedDate?: Date) => {
+        setShowEndDatePicker(false);
+        if (selectedDate) {
+            const isoDate = selectedDate.toISOString().split('T')[0];
+            setCustomEndDate(isoDate);
+        }
+    };
+    // State for custom periode
+    const [customStartDate, setCustomStartDate] = useState<string>('');
+    const [customEndDate, setCustomEndDate] = useState<string>('');
     const insets = useSafeAreaInsets();
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -57,7 +79,7 @@ function HistoryScreen() {
     };
 
 
-    const fetchPendapatan = async (phoneNumber: string, periodeType: PeriodeType = 'harian', type: OrderType = 'semua', showLoading: boolean = true, specificDate?: string, specificYear?: string, specificMonth?: string) => {
+    const fetchPendapatan = async (phoneNumber: string, periodeType: PeriodeType, type: OrderType = 'semua', showLoading: boolean = true, specificDate?: string, specificYear?: string, specificMonth?: string) => {
         try {
             if (showLoading) {
                 setLoading(true);
@@ -248,20 +270,22 @@ function HistoryScreen() {
     }, []);
 
     // Handle periode change
-    const handlePeriodeChange = useCallback(async (newPeriode: PeriodeType) => {
+    const handlePeriodeChange = useCallback(async (newPeriode: PeriodeType | 'custom') => {
         setPeriode(newPeriode);
         setLoading(true);
-        
-        if (userData?.no_hp) {
+        // Reset custom dates if not custom
+    if (newPeriode !== 'custom' as PeriodeType) {
+            setCustomStartDate('');
+            setCustomEndDate('');
+        }
+    if (userData?.no_hp && newPeriode !== 'custom' as PeriodeType) {
             await fetchPendapatan(userData.no_hp, newPeriode, type, false);
-            
             // If in list view, also fetch transaction list
             if (reportType === 'list') {
                 const { startDate, endDate } = getDateRangeForTransactionList(newPeriode, selectedDate, selectedMonth);
                 await fetchTransactionList(userData.no_hp, startDate, endDate, type);
             }
         }
-        
         setLoading(false);
     }, [userData, type, reportType, selectedDate, selectedMonth, getDateRangeForTransactionList]);
 
@@ -354,20 +378,17 @@ function HistoryScreen() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                
                 <Text style={styles.logo}>History Order</Text>
-
             </View>
-
             {/* Content with Pull to Refresh */}
-            <ScrollView 
+            <ScrollView
                 style={styles.content}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={['#0097A7']} // Android
-                        tintColor="#0097A7" // iOS
+                        colors={['#0097A7']}
+                        tintColor="#0097A7"
                     />
                 }
             >
@@ -375,53 +396,97 @@ function HistoryScreen() {
                 <View style={styles.filterCard}>
                     <View style={styles.filterRow}>
                         <Text style={styles.filterLabel}>Periode:</Text>
-                        
                         <View style={styles.filterButtons}>
                             <TouchableOpacity
-                                style={[
-                                    styles.filterButton,
-                                    periode === 'harian' && styles.filterButtonActive
-                                ]}
+                                style={[styles.filterButton, periode === 'harian' && styles.filterButtonActive]}
                                 onPress={() => handlePeriodeChange('harian')}
                             >
-                                <Text style={[
-                                    styles.filterButtonText,
-                                    periode === 'harian' && styles.filterButtonTextActive
-                                ]}>
-                                    Harian
-                                </Text>
+                                <Text style={[styles.filterButtonText, periode === 'harian' && styles.filterButtonTextActive]}>Harian</Text>
                             </TouchableOpacity>
-                            
                             <TouchableOpacity
-                                style={[
-                                    styles.filterButton,
-                                    periode === 'bulanan' && styles.filterButtonActive
-                                ]}
+                                style={[styles.filterButton, periode === 'bulanan' && styles.filterButtonActive]}
                                 onPress={() => handlePeriodeChange('bulanan')}
                             >
-                                <Text style={[
-                                    styles.filterButtonText,
-                                    periode === 'bulanan' && styles.filterButtonTextActive
-                                ]}>
-                                    Bulanan
-                                </Text>
+                                <Text style={[styles.filterButtonText, periode === 'bulanan' && styles.filterButtonTextActive]}>Bulanan</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.filterButton, periode === 'custom' && styles.filterButtonActive]}
+                                onPress={() => handlePeriodeChange('custom')}
+                            >
+                                <Text style={[styles.filterButtonText, periode === 'custom' && styles.filterButtonTextActive]}>Periode</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
-                    
-                    {/* Horizontal Line */}
-                    <View style={styles.filterDivider} />
-                    
-                    {/* List Tanggal atau Bulan */}
-                    <ScrollView 
-                        horizontal 
+                    {/* Custom Periode Date Pickers */}
+                    {periode === 'custom' && (
+                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.filterLabel}>Periode Awal</Text>
+                                <TouchableOpacity
+                                    style={styles.filterButton}
+                                    onPress={() => setShowStartDatePicker(true)}
+                                >
+                                    <Text style={styles.filterButtonText}>{customStartDate || 'Pilih tanggal'}</Text>
+                                </TouchableOpacity>
+                                {showStartDatePicker && (
+                                    <DateTimePicker
+                                        value={customStartDate ? new Date(customStartDate) : new Date()}
+                                        mode="date"
+                                        display="default"
+                                        onChange={handleStartDateChange}
+                                    />
+                                )}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.filterLabel}>Periode Akhir</Text>
+                                <TouchableOpacity
+                                    style={styles.filterButton}
+                                    onPress={() => setShowEndDatePicker(true)}
+                                >
+                                    <Text style={styles.filterButtonText}>{customEndDate || 'Pilih tanggal'}</Text>
+                                </TouchableOpacity>
+                                {showEndDatePicker && (
+                                    <DateTimePicker
+                                        value={customEndDate ? new Date(customEndDate) : new Date()}
+                                        mode="date"
+                                        display="default"
+                                        onChange={handleEndDateChange}
+                                    />
+                                )}
+                            </View>
+                            <View style={{ justifyContent: 'flex-end' }}>
+                                <TouchableOpacity
+                                    style={[styles.filterButton, { backgroundColor: '#28a745', borderColor: '#28a745' }]}
+                                    disabled={!customStartDate || !customEndDate}
+                                    onPress={async () => {
+                                        if (userData?.no_hp && customStartDate && customEndDate) {
+                                            setLoading(true);
+                                            await fetchPendapatan(userData.no_hp, 'harian', type, false, customStartDate);
+                                            if (reportType === 'list') {
+                                                await fetchTransactionList(userData.no_hp, customStartDate, customEndDate, type);
+                                            }
+                                            setLoading(false);
+                                        }
+                                    }}
+                                >
+                                    <Text style={[styles.filterButtonText, { color: '#fff' }]}>Filter</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+                </View>
+                {/* Horizontal Line */}
+                <View style={styles.filterDivider} />
+                {/* List Tanggal atau Bulan */}
+                {periode !== 'custom' && (
+                    <ScrollView
+                        horizontal
                         showsHorizontalScrollIndicator={false}
                         style={styles.dateList}
                         contentContainerStyle={styles.dateListContent}
                     >
-                        {periode === 'harian' ? (
-                            // List Tanggal
-                            getAvailableDates().map((item) => (
+                        {periode === 'harian'
+                            ? getAvailableDates().map((item) => (
                                 <TouchableOpacity
                                     key={item.value}
                                     style={[
@@ -438,9 +503,7 @@ function HistoryScreen() {
                                     </Text>
                                 </TouchableOpacity>
                             ))
-                        ) : (
-                            // List Bulan
-                            getAvailableMonths().map((item) => (
+                            : getAvailableMonths().map((item) => (
                                 <TouchableOpacity
                                     key={item.value}
                                     style={[
@@ -456,103 +519,51 @@ function HistoryScreen() {
                                         {item.label.split(' ')[0]}
                                     </Text>
                                 </TouchableOpacity>
-                            ))
-                        )}
+                            ))}
                     </ScrollView>
-
-                    <View style={styles.filterDivider} />
-
-                    <View style={{...styles.filterRow, marginTop: 12}}>
-                        <Text style={styles.filterLabel}>Order:</Text>
-                        
-                        <View style={styles.filterButtons}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.filterButton,
-                                    type === 'semua' && styles.filterButtonActive
-                                ]}
-                                onPress={() => handleTypeChange('semua')}
-                            >
-                                <Text style={[
-                                    styles.filterButtonText,
-                                    type === 'semua' && styles.filterButtonTextActive
-                                ]}>
-                                    Semua
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[
-                                    styles.filterButton,
-                                    type === 'pasca_order' && styles.filterButtonActive
-                                ]}
-                                onPress={() => handleTypeChange('pasca_order')}
-                            >
-                                <Text style={[
-                                    styles.filterButtonText,
-                                    type === 'pasca_order' && styles.filterButtonTextActive
-                                ]}>
-                                    Pasca
-                                </Text>
-                            </TouchableOpacity>
-                            
-                            <TouchableOpacity
-                                style={[
-                                    styles.filterButton,
-                                    type === 'live_order' && styles.filterButtonActive
-                                ]}
-                                onPress={() => handleTypeChange('live_order')}
-                            >
-                                <Text style={[
-                                    styles.filterButtonText,
-                                    type === 'live_order' && styles.filterButtonTextActive
-                                ]}>
-                                    Live
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
+                )}
+                <View style={styles.filterDivider} />
+                <View style={{ ...styles.filterRow, marginTop: 12 }}>
+                    <Text style={styles.filterLabel}>Order:</Text>
+                    <View style={styles.filterButtons}>
+                        <TouchableOpacity
+                            style={[styles.filterButton, type === 'semua' && styles.filterButtonActive]}
+                            onPress={() => handleTypeChange('semua')}
+                        >
+                            <Text style={[styles.filterButtonText, type === 'semua' && styles.filterButtonTextActive]}>Semua</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.filterButton, type === 'pasca_order' && styles.filterButtonActive]}
+                            onPress={() => handleTypeChange('pasca_order')}
+                        >
+                            <Text style={[styles.filterButtonText, type === 'pasca_order' && styles.filterButtonTextActive]}>Pasca</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.filterButton, type === 'live_order' && styles.filterButtonActive]}
+                            onPress={() => handleTypeChange('live_order')}
+                        >
+                            <Text style={[styles.filterButtonText, type === 'live_order' && styles.filterButtonTextActive]}>Live</Text>
+                        </TouchableOpacity>
                     </View>
-
-                    <View style={styles.filterDivider} />
-
-                    <View style={{...styles.filterRow, marginTop: 12}}>
-                        <Text style={styles.filterLabel}>Report:</Text>
-                        
-                        <View style={styles.filterButtons}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.filterButton,
-                                    reportType === 'chart' && styles.filterButtonActive
-                                ]}
-                                onPress={() => handleReportChange('chart')}
-                            >
-                                <Text style={[
-                                    styles.filterButtonText,
-                                    reportType === 'chart' && styles.filterButtonTextActive
-                                ]}>
-                                    Chart
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[
-                                    styles.filterButton,
-                                    reportType === 'list' && styles.filterButtonActive
-                                ]}
-                                onPress={() => handleReportChange('list')}
-                            >
-                                <Text style={[
-                                    styles.filterButtonText,
-                                    reportType === 'list' && styles.filterButtonTextActive
-                                ]}>
-                                    List
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
                 </View>
-                
+                <View style={styles.filterDivider} />
+                <View style={{ ...styles.filterRow, marginTop: 12 }}>
+                    <Text style={styles.filterLabel}>Report:</Text>
+                    <View style={styles.filterButtons}>
+                        <TouchableOpacity
+                            style={[styles.filterButton, reportType === 'chart' && styles.filterButtonActive]}
+                            onPress={() => handleReportChange('chart')}
+                        >
+                            <Text style={[styles.filterButtonText, reportType === 'chart' && styles.filterButtonTextActive]}>Chart</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.filterButton, reportType === 'list' && styles.filterButtonActive]}
+                            onPress={() => handleReportChange('list')}
+                        >
+                            <Text style={[styles.filterButtonText, reportType === 'list' && styles.filterButtonTextActive]}>List</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
                 {/* Loading Indicator */}
                 {loading && (
                     <View style={styles.loadingContainer}>
@@ -560,29 +571,17 @@ function HistoryScreen() {
                         <Text style={styles.loadingText}>Memuat data...</Text>
                     </View>
                 )}
-                
                 {/* Conditional Rendering: Charts or Transaction List */}
                 {!loading && reportType === 'chart' && (
                     <>
-                        {/* Grafik Pendapatan */}
                         {memoizedPendapatanChart}
-
-                        {/* Grafik Total Order */}
                         {memoizedOrderChart}
-
-                        {/* Grafik Jenis Order */}
                         {memoizedJenisOrderChart}
                     </>
                 )}
-
-                {/* Transaction List View */}
                 {!loading && reportType === 'list' && (
-                    <TransactionList
-                        transactions={transactionList}
-                        loading={loading}
-                    />
+                    <TransactionList transactions={transactionList} loading={loading} />
                 )}
-
                 {/* Bottom Spacing for Tab Bar */}
                 <View style={{ height: Platform.OS === 'android' ? Math.max(insets.bottom, 20) + 180 : Math.max(insets.bottom, 20) + 120 }} />
             </ScrollView>
