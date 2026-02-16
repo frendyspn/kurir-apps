@@ -1,19 +1,42 @@
-import { subscribeCityTopic } from "@/utils/fcmTopicManager";
+import OtpInput from '@/components/otp-input';
+import { apiService } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import messaging from '@react-native-firebase/messaging';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Button from '../../components/button';
-import OtpInput from '../../components/otp-input';
-import { apiService } from '../../services/api';
+import { Alert, Button, KeyboardAvoidingView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import GlassBackground from '../../components/glass-background';
+import { AuthColors } from '../../constants/theme';
 
-export default function OtpScreen() {
+// Helper function to safely get FCM token (works in both Expo Go and production)
+const getFirebaseFcmToken = async (): Promise<string> => {
+    try {
+        const messaging = (await import('@react-native-firebase/messaging')).default;
+        const token = await messaging().getToken();
+        console.log("FCM token for OTP:", token);
+        return token;
+    } catch (e) {
+        console.warn("Firebase not available (likely Expo Go), skipping FCM token:", e);
+        return "";
+    }
+};
+
+// Helper function to safely subscribe to city topic
+const subscribeToCity = async (city: string): Promise<void> => {
+    try {
+        const { subscribeCityTopic } = await import("@/utils/fcmTopicManager");
+        await subscribeCityTopic(city);
+        console.log(`Subscribed to city topic: ${city}`);
+    } catch (e) {
+        console.warn("Firebase not available (likely Expo Go), skipping topic subscription:", e);
+    }
+};
+
+export default function LoginOtpScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const phoneNumber = params.phone as string;
     const [otpDev, setOtpDev] = useState('');
-    // const [otpDev, setOtpDev] = useState(params.otp as string | undefined);
+
 
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
@@ -21,35 +44,31 @@ export default function OtpScreen() {
     const [canResend, setCanResend] = useState(false);
 
     useEffect(() => {
-        // Timer untuk resend OTP
-        if (resendTimer > 0) {
-            const timer = setTimeout(() => {
-                setResendTimer(resendTimer - 1);
-            }, 1000);
-            return () => clearTimeout(timer);
-        } else {
-            setCanResend(true);
-        }
-    }, [resendTimer]);
+            // Timer untuk resend OTP
+            if (resendTimer > 0) {
+                const timer = setTimeout(() => {
+                    setResendTimer(resendTimer - 1);
+                }, 1000);
+                return () => clearTimeout(timer);
+            } else {
+                setCanResend(true);
+            }
+        }, [resendTimer]);
 
-    const handleOtpComplete = async (otpValue: string) => {
+
+        const handleOtpComplete = async (otpValue: string) => {
         setOtp(otpValue);
         // Auto submit ketika OTP lengkap
         await verifyOtp(otpValue);
     };
 
+
     const verifyOtp = async (otpValue: string) => {
         setLoading(true);
 
         try {
-            // Ambil FCM token
-            let fcmToken = "";
-            try {
-                fcmToken = await messaging().getToken();
-                console.log("FCM token for OTP:", fcmToken);
-            } catch (e) {
-                console.warn("Gagal ambil FCM token", e);
-            }
+            // Ambil FCM token (auto-detect: works in Expo Go and production)
+            const fcmToken = await getFirebaseFcmToken();
 
             // Kirim ke API verifyOtp
             const result = await apiService.verifyOtp(phoneNumber, otpValue, fcmToken);
@@ -57,7 +76,7 @@ export default function OtpScreen() {
             if (result.success) {
                 console.log('OTP verified successfully:', result.data);
 
-                // TODO: Save token/user data to AsyncStorage
+                // Save token/user data to AsyncStorage
                 await AsyncStorage.setItem('userToken', result.data?.token);
                 
                 // Save user data - handle different response structures
@@ -65,8 +84,9 @@ export default function OtpScreen() {
                 console.log('💾 Saving user data:', userData);
                 await AsyncStorage.setItem('userData', JSON.stringify(userData));
 
+                // Subscribe to city topic (auto-detect: works in Expo Go and production)
                 if (userData?.kota) {
-                    await subscribeCityTopic(userData.kota);
+                    await subscribeToCity(userData.kota);
                 }
 
                 Alert.alert('Berhasil', 'OTP berhasil diverifikasi', [
@@ -89,23 +109,21 @@ export default function OtpScreen() {
     };
 
     const handleResendOtp = async () => {
-        if (!canResend) return;
-
         setLoading(true);
+        setCanResend(false);
+        setResendTimer(60);
+        
         try {
-            const result = await apiService.resendOtp(phoneNumber);
-
+            const result = await apiService.login(phoneNumber);
             if (result.success) {
-                setResendTimer(60);
-                setCanResend(false);
-                // setOtpDev(result.data?.Message);
-                Alert.alert('Berhasil', 'Kode OTP telah dikirim ulang');
+                setOtpDev(result.data?.Message || '');
+                Alert.alert('Berhasil', 'Kode OTP baru telah dikirim');
             } else {
                 Alert.alert('Error', result.message || 'Gagal mengirim ulang OTP');
             }
         } catch (error) {
             console.error('Resend OTP error:', error);
-            Alert.alert('Error', 'Gagal mengirim ulang OTP');
+            Alert.alert('Error', 'Terjadi kesalahan, silakan coba lagi');
         } finally {
             setLoading(false);
         }
@@ -118,67 +136,76 @@ export default function OtpScreen() {
                     headerShown: false,
                 }}
             />
-            <View style={styles.container}>
-                <View style={styles.content}>
-                    <View style={styles.header}>
-                        <Text style={styles.title}>Verifikasi OTP</Text>
-                        <Text style={styles.subtitle}>
-                            Masukkan kode 6 digit yang telah dikirim ke
-                        </Text>
-                        <Text style={styles.phoneNumber}>{phoneNumber}</Text>
-                    </View>
+            <KeyboardAvoidingView
+                style={styles.container}
+                // behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <GlassBackground />
+                
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    <View style={styles.content}>
+                        <View style={styles.hero}>
+                            <Text style={styles.heroTitle}>Verifikasi OTP</Text>
+                            <Text style={styles.heroSubtitle}>Kami telah mengirim kode verifikasi</Text>
+                        </View>
 
-                    <View style={styles.otpContainer}>
-                        <OtpInput
-                            length={6}
-                            onComplete={handleOtpComplete}
-                            onChangeOtp={setOtp}
-                        />
-                    </View>
+                        <View style={styles.formContainer}>
+                            <View style={styles.phoneNumberSection}>
+                                <Text style={styles.phoneLabel}>Nomor Terdaftar</Text>
+                                <Text style={styles.phoneNumber}>{phoneNumber}</Text>
+                            </View>
 
-                    <View style={styles.resendContainer}>
-                        {!canResend ? (
-                            <>
-                                <Text style={styles.timerText}>
-                                    Kirim ulang kode dalam {resendTimer} detik
-                                </Text>
-                                {otpDev && (
-                                    <Text style={styles.devText}>
-                                        Dev Only - OTP: {otpDev}
+                            <Text style={styles.otpLabel}>Masukkan 6 Digit Kode OTP</Text>
+                            <View style={styles.otpContainer}>
+                                <OtpInput
+                                    length={6}
+                                    onComplete={handleOtpComplete}
+                                    onChangeOtp={setOtp}
+                                />
+                            </View>
+
+                            <Button
+                                title="Verifikasi"
+                                onPress={() => verifyOtp(otp)}
+                                loading={loading}
+                                disabled={otp.length !== 6}
+                                variant="primary"
+                                size="large"
+                                fullWidth
+                            />
+
+                            <View style={styles.resendContainer}>
+                                {!canResend ? (
+                                    <Text style={styles.timerText}>
+                                        Kirim ulang dalam <Text style={styles.timerBold}>{resendTimer}s</Text>
                                     </Text>
+                                ) : (
+                                    <TouchableOpacity onPress={handleResendOtp} disabled={loading}>
+                                        <Text style={styles.resendText}>Kirim Ulang Kode OTP</Text>
+                                    </TouchableOpacity>
                                 )}
-                            </>
-                        ) : (
-                            <>
-                                <TouchableOpacity onPress={handleResendOtp} disabled={loading}>
-                                    <Text style={styles.resendText}>Kirim Ulang Kode</Text>
-                                </TouchableOpacity>
-                                {params.otp && (
-                                    <Text style={styles.devText}>
-                                        Dev Only - OTP: {params.otp}
-                                    </Text>
-                                )}
-                            </>
-                        )}
+                                {otpDev ? (
+                                    <Text style={styles.devText}>Dev: {otpDev}</Text>
+                                ) : params.otp ? (
+                                    <Text style={styles.devText}>Dev: {params.otp}</Text>
+                                ) : null}
+                            </View>
+
+                            <TouchableOpacity
+                                onPress={() => router.push('/auth/login')}
+                                style={styles.changePhoneButton}
+                            >
+                                <Text style={styles.changePhoneText}>Gunakan Nomor Lain</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.footer} />
                     </View>
-
-                    <Button
-                        title="Verifikasi"
-                        onPress={() => verifyOtp(otp)}
-                        loading={loading}
-                        disabled={otp.length !== 6}
-                        variant="primary"
-                        style={styles.button}
-                    />
-
-                    <TouchableOpacity
-                        onPress={() => router.back()}
-                        style={styles.backButton}
-                    >
-                        <Text style={styles.backButtonText}>Ubah Nomor HP</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </>
     );
 }
@@ -186,65 +213,110 @@ export default function OtpScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#ffffff',
+        backgroundColor: AuthColors.backgroundEnd,
+    },
+    scrollContent: {
+        flexGrow: 1,
+        paddingHorizontal: 20,
+        paddingVertical: 40,
+        justifyContent: 'center',
     },
     content: {
         flex: 1,
-        paddingHorizontal: 24,
-        paddingTop: 60,
+        justifyContent: 'center',
+        gap: 40,
     },
-    header: {
-        marginBottom: 40,
+    hero: {
+        alignItems: 'center',
+        gap: 8,
     },
-    title: {
+    heroTitle: {
         fontSize: 32,
-        fontWeight: 'bold',
-        color: '#0097A7',
-        marginBottom: 12,
+        fontWeight: '800',
+        color: AuthColors.onPrimary,
         textAlign: 'center',
+        letterSpacing: -0.5,
     },
-    subtitle: {
-        fontSize: 16,
-        color: '#6c757d',
+    heroSubtitle: {
+        fontSize: 15,
+        color: 'rgba(255, 255, 255, 0.85)',
         textAlign: 'center',
-        marginBottom: 8,
+        fontWeight: '500',
+    },
+    formContainer: {
+        gap: 24,
+    },
+    phoneNumberSection: {
+        alignItems: 'center',
+        gap: 6,
+    },
+    phoneLabel: {
+        fontSize: 13,
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     phoneNumber: {
-        fontSize: 18,
+        fontSize: 22,
+        fontWeight: '700',
+        color: AuthColors.onPrimary,
+        letterSpacing: 0.5,
+    },
+    otpLabel: {
+        fontSize: 14,
+        color: 'rgba(255, 255, 255, 0.85)',
         fontWeight: '600',
-        color: '#212529',
+        marginTop: 8,
         textAlign: 'center',
+        letterSpacing: 0.3,
     },
     otpContainer: {
-        marginBottom: 24,
+        marginBottom: 4,
+        alignItems: 'center',
     },
     resendContainer: {
         alignItems: 'center',
-        marginBottom: 32,
+        gap: 8,
+        marginTop: 4,
     },
     timerText: {
-        fontSize: 14,
-        color: '#6c757d',
+        fontSize: 13,
+        color: 'rgba(255, 255, 255, 0.75)',
+        textAlign: 'center',
+        fontWeight: '500',
+    },
+    timerBold: {
+        fontWeight: '700',
+        color: AuthColors.onPrimary,
     },
     resendText: {
-        fontSize: 16,
-        color: '#0097A7',
+        fontSize: 14,
+        color: AuthColors.onPrimary,
         fontWeight: '600',
+        textDecorationLine: 'underline',
+        textDecorationColor: AuthColors.onPrimary,
     },
     devText: {
-        fontSize: 12,
-        color: '#dc3545',
-        marginTop: 8,
+        fontSize: 10,
+        color: AuthColors.error,
+        fontWeight: '600',
+        marginTop: 4,
     },
-    button: {
-        marginBottom: 16,
-    },
-    backButton: {
+    changePhoneButton: {
         alignItems: 'center',
         paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginTop: 4,
     },
-    backButtonText: {
-        fontSize: 16,
-        color: '#6c757d',
+    changePhoneText: {
+        fontSize: 14,
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontWeight: '600',
+        textDecorationLine: 'underline',
+        textDecorationColor: 'rgba(255, 255, 255, 0.7)',
+    },
+    footer: {
+        marginTop: 4,
     },
 });

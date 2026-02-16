@@ -461,6 +461,7 @@ const TransaksiDetailModal = memo(({
                 id_sopir: currentTransaksi.id_sopir || '-',
                 no_hp: userData.no_hp,
                 biaya_antar: currentTransaksi.tarif || '0',
+                agen_kurir: currentTransaksi.agen_kurir || '-' // Pastikan field ini ada di transaksi data
             };
 
             const response = await apiService.approveTransaksi(requestData);
@@ -503,6 +504,7 @@ const TransaksiDetailModal = memo(({
                 btn_simpan: 'ambil_order',
                 no_hp: userData.no_hp,
                 id_sopir: userData.id_sopir || userData.id,
+                agen_kurir: currentTransaksi.agen_kurir || '-',
             };
 
             const response = await apiService.ambilOrder(requestData);

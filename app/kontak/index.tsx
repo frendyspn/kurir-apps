@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, BackHandler, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiService } from '@/services/api';
@@ -16,6 +16,8 @@ export default function KontakScreen() {
     const [idKonsumen, setIdKonsumen] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredContacts, setFilteredContacts] = useState<any[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const searchTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
 
     useEffect(() => {
         const initializeData = async () => {
@@ -56,22 +58,44 @@ export default function KontakScreen() {
 
         const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
 
-        return () => backHandler.remove();
+        return () => {
+            backHandler.remove();
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
     }, [navigation]);
 
-    // Filter contacts based on search query
+    // Search contacts with debouncing
     useEffect(() => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
         if (searchQuery.trim() === '') {
             setFilteredContacts(contacts);
+            setSearchLoading(false);
         } else {
-            const filtered = contacts.filter(contact =>
-                contact.nama_lengkap?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                contact.no_hp?.includes(searchQuery) ||
-                contact.alamat_lengkap?.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-            setFilteredContacts(filtered);
+            setSearchLoading(true);
+            searchTimeoutRef.current = setTimeout(async () => {
+                try {
+                    const response = await apiService.searchKonsumen(searchQuery);
+                    if (response.success && response.data) {
+                        const searchResults = Array.isArray(response.data) ? response.data : 
+                                            Array.isArray(response.data?.data) ? response.data.data : [];
+                        setFilteredContacts(searchResults);
+                    } else {
+                        setFilteredContacts([]);
+                    }
+                } catch (error) {
+                    console.error('Search error:', error);
+                    setFilteredContacts([]);
+                } finally {
+                    setSearchLoading(false);
+                }
+            }, 1500); // Debounce 1.5 detik untuk menghindari too many requests
         }
-    }, [contacts, searchQuery]);
+    }, [searchQuery]);
 
     const fetchContacts = useCallback(async (id: string) => {
         try {
@@ -125,7 +149,10 @@ export default function KontakScreen() {
     const renderContactItem = ({ item }: { item: any }) => (
         <TouchableOpacity style={styles.contactItem} onPress={() => handleContactPress(item)}>
             <View style={styles.contactInfo}>
-                <Text style={styles.contactName}>{item.nama_lengkap}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.contactName}>{item.nama_lengkap}</Text>
+                    {item.is_downline && <Ionicons name="person-add" size={14} color="#0097A7" />}
+                </View>
                 <Text style={styles.contactPhone}>{item.no_hp}</Text>
                 <Text style={styles.contactDescription}>{item.alamat_lengkap}</Text>
             </View>
@@ -140,12 +167,21 @@ export default function KontakScreen() {
             {/* Header Custom */}
             <View style={styles.header}>
                 <Text style={styles.logo}>Kontak</Text>
-                <TouchableOpacity
-                    onPress={() => router.push('/kontak/tambah')}
-                    style={styles.addButton}
-                >
-                    <Ionicons name="add" size={20} color="#0097A7" />
-                </TouchableOpacity>
+                <View style={styles.headerButtons}>
+                    <TouchableOpacity
+                        onPress={() => router.push('/kontak/import')}
+                        style={styles.importButton}
+                    >
+                        <Ionicons name="cloud-upload" size={18} color="#0097A7" />
+                        <Text style={styles.importButtonText}>Import</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => router.push('/kontak/tambah')}
+                        style={styles.addButton}
+                    >
+                        <Ionicons name="add" size={20} color="#0097A7" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Content */}
@@ -164,8 +200,16 @@ export default function KontakScreen() {
                     />
                 </View>
 
+                {/* Search Loading Indicator */}
+                {searchLoading && searchQuery.trim() !== '' && (
+                    <View style={styles.searchingContainer}>
+                        <ActivityIndicator size="small" color="#0097A7" />
+                        <Text style={styles.searchingText}>Mencari kontak...</Text>
+                    </View>
+                )}
+
                 {/* Contact List */}
-                {filteredContacts.length === 0 && !loading ? (
+                {filteredContacts.length === 0 && !loading && !searchLoading ? (
                     <View style={styles.emptyContainer}>
                         <Ionicons name="people" size={64} color="#6c757d" />
                         <Text style={styles.emptyText}>
@@ -206,10 +250,10 @@ export default function KontakScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
+        // backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -224,6 +268,25 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         flex: 1,
     },
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    importButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: '#ffffff',
+    },
+    importButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#0097A7',
+    },
     addButton: {
         width: 32,
         height: 32,
@@ -235,6 +298,7 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         padding: 16,
+        marginBottom: 90,
     },
     searchContainer: {
         backgroundColor: '#ffffff',
@@ -318,5 +382,20 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6c757d',
         textAlign: 'center',
+    },
+    searchingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        gap: 8,
+        backgroundColor: '#e7f5f7',
+        borderRadius: 8,
+        marginBottom: 12,
+    },
+    searchingText: {
+        fontSize: 14,
+        color: '#0097A7',
+        fontWeight: '500',
     },
 });

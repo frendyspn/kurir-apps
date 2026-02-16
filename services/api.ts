@@ -184,6 +184,24 @@ class ApiService {
         });
     }
 
+    async getPendapatanCustom(phoneNumber: string, startDate?: string, endDate?: string, type?: string): Promise<ApiResponse> {
+        console.log('getPendapatanCustom called with type:', type);
+        const formData = new FormData();
+        formData.append('no_hp', phoneNumber);
+        formData.append('start_date', startDate || new Date().toISOString().split('T')[0]);
+        formData.append('end_date', endDate || new Date().toISOString().split('T')[0]);
+        if (type) {
+            formData.append('type', type);
+        } else {
+            formData.append('type', 'all');
+        }
+
+        return this.request(API_ENDPOINTS.ORDER_CUSTOM, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
     // Get Jenis Layanan
     async getJenisLayanan(): Promise<ApiResponse> {
         return this.request(API_ENDPOINTS.JENIS_LAYANAN, {
@@ -395,6 +413,7 @@ class ApiService {
         id_sopir: string;
         no_hp: string;
         biaya_antar: string;
+        agen_kurir: string;
     }): Promise<ApiResponse> {
         const formData = new FormData();
 
@@ -407,7 +426,7 @@ class ApiService {
         formData.append('alamat_penjemputan', '-');
         formData.append('alamat_tujuan', '-');
         formData.append('biaya_antar', data.biaya_antar);
-        formData.append('agen_kurir', '-');
+        formData.append('agen_kurir', data.agen_kurir);
 
         return this.request(API_ENDPOINTS.APPROVE_TRANSAKSI_MANUAL, {
             method: 'POST',
@@ -589,7 +608,7 @@ class ApiService {
         const formData = new FormData();
         formData.append('id_konsumen', idKonsumen);
 
-        return this.request(API_ENDPOINTS.GET_KONSUMEN, {
+        return this.request(API_ENDPOINTS.GET_USER_CITY, {
             method: 'POST',
             body: formData,
         });
@@ -611,6 +630,39 @@ class ApiService {
         return this.request(API_ENDPOINTS.ADD_KONSUMEN, {
             method: 'POST',
             body: formData,
+        });
+    }
+
+    // Search konsumen by keyword
+    async searchKonsumen(keyword: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('keyword', keyword);
+
+        return this.request(API_ENDPOINTS.SEARCH_KONSUMEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Bulk add konsumen for import feature
+    async bulkAddKonsumen(contacts: Array<{
+        id_kurir: string;
+        nama_lengkap: string;
+        no_hp: string;
+        email?: string;
+        alamat_lengkap?: string;
+    }>): Promise<ApiResponse> {
+        // Check if API endpoint exists, otherwise use ADD_KONSUMEN
+        const endpoint = API_ENDPOINTS.BULK_ADD_KONSUMEN;
+        
+        return this.request(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contacts: contacts
+            }),
         });
     }
 

@@ -27,6 +27,29 @@ export const Colors = {
   },
 };
 
+export const AuthColors = {
+  backgroundStart: '#0B5FFF',
+  backgroundEnd: '#3BA4F9',
+  glowTop: '#1E5FAF',
+  glowBottom: '#2AA7A1',
+  cardBackground: '#F6FAFF',
+  cardBorder: '#D7E5FF',
+  primary: '#1E5FAF',
+  primaryPressed: '#1E5FAF',
+  secondary: '#2AA7A1',
+  textPrimary: '#0B1B3D',
+  textSecondary: '#5B6B8C',
+  textMuted: '#7C8AA8',
+  divider: '#CFE0FF',
+  inputBackground: '#FFFFFF',
+  inputBorder: '#D7E5FF',
+  inputPlaceholder: '#8AA0C6',
+  onPrimary: '#FFFFFF',
+  outlineBorder: '#BFD3FF',
+  link: '#1E63FF',
+  error: '#E55353',
+};
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

@@ -2,8 +2,10 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Button from '../../components/button';
+import GlassBackground from '../../components/glass-background';
 import Input from '../../components/input';
 import { APP_NAME } from '../../constant';
+import { AuthColors } from '../../constants/theme';
 import { apiService } from '../../services/api';
 
 export default function LoginScreen() {
@@ -33,20 +35,17 @@ export default function LoginScreen() {
 
         setLoading(true);
 
+    
         try {
             const result = await apiService.login(phoneNumber);
-
+            
             if (result.success) {
                 console.log('Login successful:', result.data);
-                
+
                 // Navigate ke OTP screen
-                router.push({
-                    pathname: '/auth/otp',
-                    params: { 
-                        phone: phoneNumber,
-                        otp: result.data?.Message // Untuk development
-                    }
-                });
+                const encodedPhone = encodeURIComponent(phoneNumber);
+                const encodedOtp = encodeURIComponent(result.data?.Message || '');
+                router.push(`/auth/otp?phone=${encodedPhone}&otp=${encodedOtp}`);
             } else {
                 setError(result.message || 'Login gagal, silakan coba lagi');
             }
@@ -69,59 +68,72 @@ export default function LoginScreen() {
                 style={styles.container}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
+                <GlassBackground />
+
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="never"
+                    keyboardShouldPersistTaps="handled"
                 >
                     <View style={styles.content}>
-                        <View style={styles.header}>
-                            <Text style={styles.title}>{APP_NAME}</Text>
-                            <Text style={styles.subtitle}>
-                                Masukkan nomor HP Anda untuk masuk
-                            </Text>
+                        <View style={styles.hero}>
+                            <Text style={styles.heroTitle}>{APP_NAME}</Text>
+                            {/* <Text style={styles.heroSubtitle}>Masuk untuk melanjutkan pengiriman</Text> */}
                         </View>
 
-                        <View style={styles.form}>
-                            <Input
-                                label="Nomor HP"
-                                placeholder="Contoh: 081234567890"
-                                keyboardType="phone-pad"
-                                value={phoneNumber}
-                                onChangeText={(text) => {
-                                    setPhoneNumber(text);
-                                    setError('');
-                                }}
-                                maxLength={15}
-                                error={error}
-                            />
+                        <View style={styles.formContainer}>
+                            <View style={styles.headerSection}>
+                                {/* <Text style={styles.welcomeText}>Selamat datang kembali</Text> */}
+                                <Text style={styles.instructionText}>Masukkan nomor HP untuk menerima kode OTP</Text>
+                            </View>
 
-                            <Button
-                                title="Masuk"
-                                onPress={handleLogin}
-                                loading={loading}
-                                variant="primary"
-                            />
-                        </View>
+                            <View style={styles.form}>
+                                <Input
+                                    label="Nomor HP"
+                                    placeholder="Contoh: 081234567890"
+                                    placeholderTextColor={AuthColors.inputPlaceholder}
+                                    keyboardType="phone-pad"
+                                    value={phoneNumber}
+                                    onChangeText={(text) => {
+                                        setPhoneNumber(text);
+                                        setError('');
+                                    }}
+                                    maxLength={15}
+                                    error={error}
+                                    labelStyle={styles.inputLabel}
+                                    errorStyle={styles.inputError}
+                                    style={styles.input}
+                                />
 
-                        {/* Divider */}
-                        <View style={styles.dividerContainer}>
-                            <View style={styles.dividerLine} />
-                            <Text style={styles.dividerText}>atau</Text>
-                            <View style={styles.dividerLine} />
-                        </View>
+                                <Button
+                                    title="Masuk"
+                                    onPress={handleLogin}
+                                    loading={loading}
+                                    variant="primary"
+                                    size="large"
+                                    fullWidth
+                                />
+                            </View>
 
-                        {/* Register Section */}
-                        <View style={styles.registerSection}>
-                            <Text style={styles.registerText}>
-                                Belum punya akun?
-                            </Text>
-                            <Button
-                                title="Daftar Sekarang"
-                                onPress={() => {
-                                    router.push('/auth/register');
-                                }}
-                                variant="outline"
-                            />
+                            <View style={styles.dividerContainer}>
+                                <View style={styles.dividerLine} />
+                                <Text style={styles.dividerText}>atau</Text>
+                                <View style={styles.dividerLine} />
+                            </View>
+
+                            <View style={styles.registerSection}>
+                                <Text style={styles.registerText}>
+                                    Belum punya akun?
+                                </Text>
+                                <Button
+                                    title="Daftar Sekarang"
+                                    onPress={() => {
+                                        router.push('/auth/register');
+                                    }}
+                                    variant="outline"
+                                    size="medium"
+                                    fullWidth
+                                />
+                            </View>
                         </View>
 
                         <View style={styles.footer}>
@@ -142,73 +154,113 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#ffffff',
+        backgroundColor: AuthColors.backgroundEnd,
     },
     scrollContent: {
         flexGrow: 1,
+        paddingHorizontal: 20,
+        paddingVertical: 40,
+        justifyContent: 'center',
     },
     content: {
         flex: 1,
         justifyContent: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 40,
+        gap: 32,
     },
-    header: {
-        marginBottom: 40,
+    hero: {
+        alignItems: 'center',
+        gap: 8,
     },
-    title: {
+    heroTitle: {
         fontSize: 32,
-        fontWeight: 'bold',
-        color: '#0097A7',
-        marginBottom: 12,
+        fontWeight: '800',
+        color: AuthColors.onPrimary,
         textAlign: 'center',
+        letterSpacing: -0.5,
     },
-    subtitle: {
-        fontSize: 16,
-        color: '#6c757d',
+    heroSubtitle: {
+        fontSize: 15,
+        color: 'rgba(255, 255, 255, 0.85)',
         textAlign: 'center',
-        lineHeight: 22,
+        fontWeight: '500',
+    },
+    formContainer: {
+        gap: 24,
+    },
+    headerSection: {
+        alignItems: 'center',
+        gap: 6,
+    },
+    welcomeText: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: AuthColors.onPrimary,
+        textAlign: 'center',
+        letterSpacing: 0.3,
+    },
+    instructionText: {
+        fontSize: 14,
+        color: 'rgba(255, 255, 255, 0.8)',
+        textAlign: 'center',
+        lineHeight: 20,
     },
     form: {
-        marginBottom: 24,
+        gap: 16,
+    },
+    input: {
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.6)',
+        backgroundColor: 'rgba(255, 255, 255, 0.75)',
+        paddingVertical: 14,
+    },
+    inputLabel: {
+        color: 'rgba(255, 255, 255, 0.9)',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    inputError: {
+        color: AuthColors.error,
     },
     dividerContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginVertical: 24,
+        marginVertical: 8,
     },
     dividerLine: {
         flex: 1,
         height: 1,
-        backgroundColor: '#dee2e6',
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
     },
     dividerText: {
-        fontSize: 14,
-        color: '#6c757d',
-        paddingHorizontal: 16,
-        fontWeight: '500',
+        fontSize: 12,
+        color: 'rgba(255, 255, 255, 0.7)',
+        paddingHorizontal: 12,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     registerSection: {
-        marginBottom: 24,
-        gap: 12,
+        gap: 10,
     },
     registerText: {
-        fontSize: 15,
-        color: '#212529',
+        fontSize: 14,
+        color: 'rgba(255, 255, 255, 0.85)',
         textAlign: 'center',
-        fontWeight: '500',
+        fontWeight: '600',
     },
     footer: {
-        marginTop: 24,
+        marginTop: 4,
+        paddingHorizontal: 16,
     },
     footerText: {
         fontSize: 12,
-        color: '#6c757d',
+        color: 'rgba(255, 255, 255, 0.8)',
         textAlign: 'center',
         lineHeight: 18,
     },
     link: {
-        color: '#0097A7',
-        fontWeight: '500',
+        color: AuthColors.onPrimary,
+        fontWeight: '700',
     },
 });

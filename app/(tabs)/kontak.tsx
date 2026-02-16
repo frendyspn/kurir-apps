@@ -1,5 +1,6 @@
+import GlassBackground from '@/components/glass-background';
 import KontakScreen from '../kontak/index';
 
 export default function KontakTab() {
-    return <KontakScreen />;
+    return <> <GlassBackground /> <KontakScreen /> </>;
 }

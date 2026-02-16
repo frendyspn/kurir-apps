@@ -1,5 +1,5 @@
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,8 +11,11 @@ import InAppNotification from "@/components/InAppNotification";
 import messaging from '@react-native-firebase/messaging';
 import { useEffect, useState } from "react";
 
-import { Linking } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import { notificationEvents } from '../utils/notificationEvents';
+
+// Enable debug mode - set to false for production
+const DEBUG_NOTIFICATIONS = false;
 
 export const unstable_settings = {
     anchor: '(tabs)',
@@ -20,6 +23,7 @@ export const unstable_settings = {
 
 export default function RootLayout() {
     const colorScheme = useColorScheme();
+    const router = useRouter();
 
     const [notif, setNotif] = useState({
         visible: false,
@@ -57,18 +61,132 @@ export default function RootLayout() {
         registerForPush();
     }, []);
 
+    // Handle notification opened from background/closed state
+    useEffect(() => {
+        // Handle notification opened when app is in background or closed
+        const unsubscribeOnNotificationOpenedApp = messaging().onNotificationOpenedApp(remoteMessage => {
+            console.log('📲 Notification opened from background:', JSON.stringify(remoteMessage));
+            
+            if (DEBUG_NOTIFICATIONS) {
+                Alert.alert('Debug: Notif from Background', JSON.stringify(remoteMessage?.data));
+            }
+            
+            const data = remoteMessage?.data;
+            if (data?.navigate_to) {
+                console.log('🔗 Navigation data:', data);
+                handleNotificationNavigation(data);
+            } else {
+                console.log('⚠️ No navigate_to found in notification data');
+            }
+        });
+
+        // Handle notification when app is opened from closed state via notification
+        messaging()
+            .getInitialNotification()
+            .then(remoteMessage => {
+                if (remoteMessage) {
+                    console.log('📲 App opened from notification (closed state):', JSON.stringify(remoteMessage));
+                    
+                    if (DEBUG_NOTIFICATIONS) {
+                        Alert.alert('Debug: App Opened from Notif', JSON.stringify(remoteMessage?.data));
+                    }
+                    
+                    const data = remoteMessage?.data;
+                    if (data?.navigate_to) {
+                        console.log('🔗 Initial notification data:', data);
+                        setTimeout(() => {
+                            handleNotificationNavigation(data);
+                        }, 1500); // Delay to ensure navigation is ready
+                    } else {
+                        console.log('⚠️ No navigate_to found in initial notification data');
+                    }
+                }
+            });
+
+        return unsubscribeOnNotificationOpenedApp;
+    }, []);
+
+    const handleNotificationNavigation = (data: any) => {
+        console.log('🔗 handleNotificationNavigation called with:', data);
+        
+        const route = data?.navigate_to;
+        const transactionId = data?.transaction_id;
+
+        console.log('🔗 Route:', route, 'Transaction ID:', transactionId);
+
+        // Debug alert - remove in production
+        if (DEBUG_NOTIFICATIONS) {
+            Alert.alert(
+                'Debug: Notification Clicked',
+                `Route: ${route}\nTransaction: ${transactionId}`,
+                [{ text: 'OK' }]
+            );
+        }
+
+        try {
+            if (route === 'live-order') {
+                console.log('🔗 Navigating to live-order...');
+                // Use deep linking URL
+                Linking.openURL(`mitra-klikquick://live-order/${transactionId || ''}`);
+            } else if (route === 'history') {
+                console.log('🔗 Navigating to history...');
+                Linking.openURL(`mitra-klikquick://history/${transactionId || ''}`);
+            } else if (route === 'transaksi') {
+                console.log('🔗 Navigating to transaksi...');
+                Linking.openURL(`mitra-klikquick://transaksi/${transactionId || ''}`);
+            } else if (route === 'saldo') {
+                console.log('🔗 Navigating to saldo...');
+                // Use deep linking URL
+                Linking.openURL(`mitra-klikquick://saldo`);
+            } else {
+                console.log('⚠️ Unknown route:', route);
+                if (DEBUG_NOTIFICATIONS) {
+                    Alert.alert('Debug', `Unknown route: ${route}`);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Navigation error:', error);
+            if (DEBUG_NOTIFICATIONS) {
+                Alert.alert('Navigation Error', String(error));
+            }
+        }
+    };
+
     async function registerForPush() {
-        const authStatus = await messaging().requestPermission();
-        const enabled =
-            authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-            authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        try {
+            // Request permission first
+            const authStatus = await messaging().requestPermission();
+            const enabled =
+                authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+                authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-        if (!enabled) return;
+            if (!enabled) {
+                console.warn('⚠️ User did not grant notification permission');
+                Alert.alert(
+                    'Izin Notifikasi',
+                    'Notifikasi diblokir. Aktifkan izin agar bisa menerima order baru.',
+                    [
+                        { text: 'Batal', style: 'cancel' },
+                        {
+                            text: 'Buka Pengaturan',
+                            onPress: () => Linking.openSettings(),
+                        },
+                    ]
+                );
+                return null;
+            }
 
-        const fcmToken = await messaging().getToken();
-        console.log("FCM Token:", fcmToken);
+            console.log('✅ Notification permission granted:', authStatus);
 
-        return fcmToken;
+            // Get FCM token
+            const fcmToken = await messaging().getToken();
+            console.log("📱 FCM Token:", fcmToken);
+
+            return fcmToken;
+        } catch (error) {
+            console.error('❌ Error requesting notification permission:', error);
+            return null;
+        }
     }
 
     return (

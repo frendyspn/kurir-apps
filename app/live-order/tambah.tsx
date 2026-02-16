@@ -367,28 +367,35 @@ export default function TambahTransaksiScreen() {
             
             console.log('✅ Order saved to database:', apiResponse.data);
             
-            // Step 2: Create Firebase order for real-time notifications
-            const firebaseOrderData = {
-                kode_order: apiResponse.data?.data?.kode_order || `ORD-${Date.now()}`,
-                service: layanan,
-                tarif: parseInt(biayaAntar),
-                titik_jemput: alamatJemput,
-                alamat_jemput: alamatJemput,
-                titik_antar: alamatAntar,
-                alamat_antar: alamatAntar,
-                produk: (layanan === 'FOOD' || layanan === 'SHOP') ? produkList : null,
-                // Add additional Firebase-specific fields
-                id_transaksi: apiResponse.data?.data?.id_transaksi,
-                status: 'SEARCH',
-                created_at: new Date().toISOString(),
-            };
+            // Step 2: Create Firebase order for real-time notifications (optional)
+            try {
+                const firebaseOrderData = {
+                    kode_order: apiResponse.data?.data?.kode_order || `ORD-${Date.now()}`,
+                    service: layanan,
+                    tarif: parseInt(biayaAntar),
+                    titik_jemput: alamatJemput,
+                    alamat_jemput: alamatJemput,
+                    titik_antar: alamatAntar,
+                    alamat_antar: alamatAntar,
+                    produk: (layanan === 'FOOD' || layanan === 'SHOP') ? produkList : null,
+                    // Add additional Firebase-specific fields
+                    id_transaksi: apiResponse.data?.data?.id_transaksi,
+                    status: 'SEARCH',
+                    created_at: new Date().toISOString(),
+                };
 
-            console.log('📤 Creating order via Firebase:', firebaseOrderData);
-            const firebaseOrder = await socketService.createOrder(firebaseOrderData);
+                console.log('📤 Creating order via Firebase:', firebaseOrderData);
+                await socketService.createOrder(firebaseOrderData);
+                console.log('✅ Firebase order created successfully');
+            } catch (firebaseError) {
+                console.warn('⚠️ Firebase order creation failed (continuing anyway):', firebaseError);
+                // Continue even if Firebase fails - order already saved to database
+            }
             
+            const kodeOrder = apiResponse.data?.data?.kode_order || 'Order baru';
             Alert.alert(
                 'Berhasil!',
-                `Order ${firebaseOrder.kode_order} berhasil dibuat dan dikirim ke kurir`,
+                `Order ${kodeOrder} berhasil dibuat`,
                 [{ text: 'OK', onPress: () => router.back() }]
             );
             

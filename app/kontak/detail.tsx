@@ -13,6 +13,8 @@ type Contact = {
     no_hp: string;
     type: string;
     alamat_lengkap: string;
+    allow_edit: boolean;
+    allow_delete: boolean;
 };
 
 export default function DetailKontakScreen() {
@@ -29,6 +31,26 @@ export default function DetailKontakScreen() {
         const formatted = `${currentContactData.nama_lengkap}\n${currentContactData.no_hp}\n${currentContactData.alamat_lengkap}`;
         Clipboard.setString(formatted);
         Alert.alert('Disalin', 'Kontak telah disalin ke clipboard');
+    }, [currentContactData]);
+
+    const handleCopyAlamat = useCallback(() => {
+        if (!currentContactData) return;
+        Clipboard.setString(currentContactData.alamat_lengkap);
+        Alert.alert('Disalin', 'Alamat telah disalin ke clipboard');
+    }, [currentContactData]);
+
+    const handleCopyKontakNama = useCallback(() => {
+        if (!currentContactData) return;
+        const formatted = `${currentContactData.nama_lengkap}\n${currentContactData.no_hp}`;
+        Clipboard.setString(formatted);
+        Alert.alert('Disalin', 'Nama dan nomor HP telah disalin ke clipboard');
+    }, [currentContactData]);
+
+    const handleCopyKontakNamaAlamat = useCallback(() => {
+        if (!currentContactData) return;
+        const formatted = `${currentContactData.nama_lengkap}\n${currentContactData.no_hp}\n${currentContactData.alamat_lengkap}`;
+        Clipboard.setString(formatted);
+        Alert.alert('Disalin', 'Nama dan alamat telah disalin ke clipboard');
     }, [currentContactData]);
 
     // Update contact data when parameters change (e.g., after editing)
@@ -75,13 +97,18 @@ export default function DetailKontakScreen() {
 
             const user = JSON.parse(userData);
             
-            // Get transactions for the last 30 days
+            // Get transactions for the last 30 days (with timezone offset)
             const endDate = new Date();
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - 30);
             
-            const startDateStr = startDate.toISOString().split('T')[0];
-            const endDateStr = endDate.toISOString().split('T')[0];
+            // Convert to local timezone (GMT+7) by adding offset
+            const offset = 7 * 60; // 7 hours in minutes
+            const localEndDate = new Date(endDate.getTime() + offset * 60 * 1000);
+            const localStartDate = new Date(startDate.getTime() + offset * 60 * 1000);
+            
+            const startDateStr = localStartDate.toISOString().split('T')[0];
+            const endDateStr = localEndDate.toISOString().split('T')[0];
 
             const response = await apiService.getListTransaksiManualKonsumen(
                 currentContactData.no_hp,
@@ -89,6 +116,8 @@ export default function DetailKontakScreen() {
                 endDateStr,
                 currentContactData.id_konsumen // Filter by customer ID
             );
+
+            console.log('================== END DATE '+endDateStr);
 
             if (response.success && response.data && response.data.data) {
                 const transactionsData = response.data.data;
@@ -294,7 +323,7 @@ export default function DetailKontakScreen() {
         <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
             {/* Header Custom */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)/kontak')} style={styles.headerBackButton}>
                     <Ionicons name="chevron-back-outline" size={24} color="#ffffff" />
                 </TouchableOpacity>
                 <Text style={styles.logo}>Detail Kontak</Text>
@@ -318,7 +347,7 @@ export default function DetailKontakScreen() {
                     >
                         <View style={styles.menuContainer}>
                             <TouchableOpacity
-                                style={styles.menuItem}
+                                style={[styles.menuItem, { paddingVertical: 5 }]}
                                 onPress={() => {
                                     setShowMenu(false);
                                     handleCopyKontak();
@@ -328,31 +357,73 @@ export default function DetailKontakScreen() {
                                 <Text style={styles.menuItemText}>Copy Kontak</Text>
                             </TouchableOpacity>
 
-                            <View style={styles.menuDivider} />
-
                             <TouchableOpacity
-                                style={styles.menuItem}
+                                style={[styles.menuItem, { paddingVertical: 5 }]}
                                 onPress={() => {
                                     setShowMenu(false);
-                                    handleEditKontak();
+                                    handleCopyAlamat();
                                 }}
                             >
-                                <Ionicons name="create-outline" size={20} color="#0097A7" />
-                                <Text style={styles.menuItemText}>Edit Kontak</Text>
+                                <Ionicons name="copy-outline" size={20} color="#0097A7" />
+                                <Text style={styles.menuItemText}>Copy Alamat</Text>
                             </TouchableOpacity>
-
-                            <View style={styles.menuDivider} />
 
                             <TouchableOpacity
-                                style={[styles.menuItem, styles.menuItemDelete]}
+                                style={[styles.menuItem, { paddingVertical: 5 }]}
                                 onPress={() => {
                                     setShowMenu(false);
-                                    handleDeleteKontak();
+                                    handleCopyKontakNama();
                                 }}
                             >
-                                <Ionicons name="trash-outline" size={20} color="#dc3545" />
-                                <Text style={[styles.menuItemText, styles.menuItemTextDelete]}>Hapus Kontak</Text>
+                                <Ionicons name="copy-outline" size={20} color="#0097A7" />
+                                <Text style={styles.menuItemText}>Copy Kontak + Nama</Text>
                             </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.menuItem, { paddingVertical: 5 }]}
+                                onPress={() => {
+                                    setShowMenu(false);
+                                    handleCopyKontakNamaAlamat();
+                                }}
+                            >
+                                <Ionicons name="copy-outline" size={20} color="#0097A7" />
+                                <Text style={styles.menuItemText}>Copy Kontak + Nama + Alamat</Text>
+                            </TouchableOpacity>
+
+                            
+
+                            {currentContactData.allow_edit && (
+                                <>
+                                <View style={styles.menuDivider} />
+                                <TouchableOpacity
+                                    style={styles.menuItem}
+                                    onPress={() => {
+                                        setShowMenu(false);
+                                        handleEditKontak();
+                                    }}
+                                >
+                                    <Ionicons name="create-outline" size={20} color="#0097A7" />
+                                    <Text style={styles.menuItemText}>Edit Kontak</Text>
+                                </TouchableOpacity>
+                                </>
+                            )}
+
+                            {currentContactData.allow_delete && (
+                                <>
+                                <View style={styles.menuDivider} />
+
+                                <TouchableOpacity
+                                    style={[styles.menuItem, styles.menuItemDelete]}
+                                    onPress={() => {
+                                        setShowMenu(false);
+                                        handleDeleteKontak();
+                                    }}
+                                >
+                                    <Ionicons name="trash-outline" size={20} color="#dc3545" />
+                                    <Text style={[styles.menuItemText, styles.menuItemTextDelete]}>Hapus Kontak</Text>
+                                </TouchableOpacity>
+                                </>
+                            )}
                         </View>
                     </TouchableOpacity>
                 </Modal>

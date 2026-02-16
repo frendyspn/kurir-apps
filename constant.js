@@ -14,12 +14,12 @@ const generateToken = () => {
     // return rawString;
 };
 
-// export const API_BASE_URL = 'https://api.satutoko.my.id/api';
-export const API_BASE_URL = 'https://api.depokniaga.com/api';
+export const API_BASE_URL = 'https://api.satutoko.my.id/api';
+// export const API_BASE_URL = 'https://api.depokniaga.com/api';
 export const BROADCAST_URL = 'http://api.depokniaga.com:6001';
 export const SOCKET_URL = 'http://api.depokniaga.com:6001';
 export const API_TOKEN = generateToken();
-export const APP_NAME = 'Depok Niaga';
+export const APP_NAME = 'KlikQuick';
 
 export const API_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/kurir/login`,
@@ -27,6 +27,7 @@ export const API_ENDPOINTS = {
     BALANCE: `${API_BASE_URL}/kurir/v1/getBalance`,
     ORDER_DAILY: `${API_BASE_URL}/kurir/v1/orders/daily`,
     ORDER_MONTHLY: `${API_BASE_URL}/kurir/v1/orders/monthly`,
+    ORDER_CUSTOM: `${API_BASE_URL}/kurir/v1/orders/custom`,
     JENIS_LAYANAN: `${API_BASE_URL}/kurir/v1/jenis-layanan`,
     LIST_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/transaksi-manual`,
     LIST_TRANSAKSI_MANUAL_KONSUMEN: `${API_BASE_URL}/kurir/v1/transaksi-manual-konsumen`,
@@ -46,8 +47,11 @@ export const API_ENDPOINTS = {
     UPDATE_KONSUMEN: `${API_BASE_URL}/kurir/v1/update-konsumen`,
     UPDATE_KONSUMEN_SIMPLE: `${API_BASE_URL}/kurir/v1/update-konsumen-simple`,
     GET_KONSUMEN: `${API_BASE_URL}/kurir/v1/get-pelanggan`,
+    GET_USER_CITY: `${API_BASE_URL}/kurir/v1/get-user-city`,
     ADD_KONSUMEN: `${API_BASE_URL}/kurir/v1/add-pelanggan`,
+    BULK_ADD_KONSUMEN: `${API_BASE_URL}/kurir/v1/bulk-add-konsumen`,
     DELETE_KONSUMEN: `${API_BASE_URL}/kurir/v1/delete-konsumen`,
+    SEARCH_KONSUMEN: `${API_BASE_URL}/kurir/v1/search-konsumen`,
     GET_TRANSACTION_HISTORY: `${API_BASE_URL}/v1/get_transaction_history`,
     GET_TOP_UP_METHODS: `${API_BASE_URL}/v1/get_top_up_methods`,
     CREATE_TOP_UP_REQUEST: `${API_BASE_URL}/v1/create_top_up_request`,

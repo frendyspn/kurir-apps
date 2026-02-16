@@ -1,5 +1,9 @@
+import GlassBackground from '@/components/glass-background';
 import TransaksiScreen from '../transaksi-manual/index';
 
 export default function TransaksiTab() {
-    return <TransaksiScreen />;
+    return <>
+    <GlassBackground />
+    <TransaksiScreen />
+    </> ;
 }

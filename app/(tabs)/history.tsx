@@ -1,3 +1,4 @@
+import GlassBackground from '@/components/glass-background';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
@@ -91,6 +92,11 @@ function HistoryScreen() {
                 // Use specific date if provided, otherwise use undefined for current/default
                 const dateToUse = specificDate || undefined;
                 response = await apiService.getPendapatanDaily(phoneNumber, dateToUse, type);
+            } else if (periodeType === 'custom') {
+                // Use specific start and end dates if provided, otherwise use undefined for current/default
+                const startDateToUse = specificDate || undefined;
+                const endDateToUse = specificDate || undefined;
+                response = await apiService.getPendapatanCustom(phoneNumber, startDateToUse, endDateToUse, type);
             } else {
                 // Use specific year/month if provided, otherwise use undefined for current/default
                 const yearToUse = specificYear || undefined;
@@ -376,6 +382,7 @@ function HistoryScreen() {
 
     return (
         <View style={styles.container}>
+            <GlassBackground />
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.logo}>History Order</Text>
@@ -461,7 +468,7 @@ function HistoryScreen() {
                                     onPress={async () => {
                                         if (userData?.no_hp && customStartDate && customEndDate) {
                                             setLoading(true);
-                                            await fetchPendapatan(userData.no_hp, 'harian', type, false, customStartDate);
+                                            await fetchPendapatan(userData.no_hp, 'custom', type, false, customStartDate, customEndDate);
                                             if (reportType === 'list') {
                                                 await fetchTransactionList(userData.no_hp, customStartDate, customEndDate, type);
                                             }
@@ -595,7 +602,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -730,7 +737,7 @@ const styles = StyleSheet.create({
     },
     filterButton: {
         paddingVertical: 8,
-        paddingHorizontal: 20,
+        paddingHorizontal: 15,
         borderRadius: 8,
         backgroundColor: '#f8f9fa',
         borderWidth: 1,

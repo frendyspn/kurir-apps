@@ -4,10 +4,15 @@ import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, BackHandler, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Badge from '../../components/badge';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
 import OrderChart from '../../components/charts/order-chart';
 import PendapatanChart from '../../components/charts/pendapatan-chart';
+import FilterChip from '../../components/filter-chip';
+import GlassBackground from '../../components/glass-background';
+import InfoCard from '../../components/info-card';
 import { APP_NAME } from '../../constant';
+import { AuthColors } from '../../constants/theme';
 import { apiService } from '../../services/api';
 import socketService from '../../services/socket';
 import { notificationEvents } from '../../utils/notificationEvents'; // sesuaikan path
@@ -63,7 +68,7 @@ function HomeScreen() {
     };
 
     useEffect(() => {
-        fetchUnreadNotifCount();
+        // fetchUnreadNotifCount();
     }, []);
 
     // Data grafik pie jenis order
@@ -99,6 +104,7 @@ function HomeScreen() {
                 // Fetch balance after getting user data
                 await fetchBalance(parsedData.no_hp);
                 await fetchPendapatan(parsedData.no_hp);
+                await fetchUnreadNotifCount();
             } else {
                 console.log('❌ NO USER DATA FOUND IN ASYNCSTORAGE');
             }
@@ -136,14 +142,14 @@ function HomeScreen() {
         }
     };
 
-    
+
 
     // Toggle show/hide saldo
     const handleToggleSaldo = useCallback(() => {
         setShowSaldo(prev => !prev);
     }, []);
 
-    
+
 
     // Update data based on selected filter
     // MOVED TO handleFilterChange for immediate UI feedback
@@ -155,12 +161,12 @@ function HomeScreen() {
             console.log('🔌 Initializing socket connection...');
             await socketService.connect();
             console.log('✅ Socket connected successfully');
-            
+
             // Test socket connection immediately
             console.log('🧪 Testing socket connection...');
             const testResult = socketService.getConnectionStatus();
             console.log('🧪 Socket connection status:', testResult);
-            
+
         } catch (error) {
             console.error('❌ Socket connection failed:', error);
             Alert.alert('Connection Error', 'Failed to connect to real-time service');
@@ -230,7 +236,7 @@ function HomeScreen() {
     const handleFilterChange = useCallback(async (filterId: string) => {
         console.log(`Filter changed to: ${filterId}`);
         setSelectedFilter(filterId);
-        
+
         // Fetch data immediately for better UX
         if (userData?.no_hp) {
             if (filterId === 'live_order') {
@@ -298,15 +304,13 @@ function HomeScreen() {
 
     return (
         <View style={styles.container}>
+            <GlassBackground />
+
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.notificationButton} onPress={() => setShowNotifModal(true)}>
                     <Ionicons name="notifications-outline" size={24} color="#ffffff" />
-                    {unreadNotifCount > 0 && (
-                        <View style={styles.badge}>
-                            <Text style={styles.badgeText}>{unreadNotifCount}</Text>
-                        </View>
-                    )}
+                    <Badge count={unreadNotifCount} variant="danger" size="medium" style={styles.notificationBadge} />
                 </TouchableOpacity>
 
                 <Text style={styles.logo}>{APP_NAME}</Text>
@@ -344,9 +348,11 @@ function HomeScreen() {
                 }
             >
                 {/* Saldo Card */}
-                <View style={styles.saldoCard}>
-                    <View style={styles.saldoHeader}>
-                        <Text style={styles.saldoLabel}>Saldo Anda</Text>
+                <InfoCard
+                    title="Saldo Anda"
+                    value={showSaldo ? formatCurrency(saldo) : 'Rp ******'}
+                    variant="default"
+                    rightElement={
                         <TouchableOpacity onPress={handleToggleSaldo}>
                             <Ionicons
                                 name={showSaldo ? "eye-outline" : "eye-off-outline"}
@@ -354,12 +360,8 @@ function HomeScreen() {
                                 color="#6c757d"
                             />
                         </TouchableOpacity>
-                    </View>
-
-                    <Text style={styles.saldoAmount}>
-                        {showSaldo ? formatCurrency(saldo) : 'Rp ******'}
-                    </Text>
-                </View>
+                    }
+                />
 
                 {/* Horizontal Menu */}
                 <ScrollView
@@ -382,13 +384,13 @@ function HomeScreen() {
                     ))}
                 </ScrollView>
 
-                
+
                 {/* MENU KHUSUS AGEN */}
                 {
                     userData?.agen === '1' && (
-                        <View style={styles.saldoCard}>
-                            <View style={styles.saldoHeader}>
-                                <Text style={styles.saldoLabel}>Menu Khusus Agen</Text>
+                        <View style={styles.agentMenuCard}>
+                            <View style={styles.agentMenuHeader}>
+                                <Text style={styles.agentMenuTitle}>Menu Khusus Agen</Text>
                             </View>
 
                             <View style={styles.menuRow}>
@@ -402,7 +404,7 @@ function HomeScreen() {
                                     <Text style={styles.menuText}>Live Order</Text>
                                 </TouchableOpacity>
 
-                                
+
                             </View>
                         </View>
                     )
@@ -420,21 +422,14 @@ function HomeScreen() {
                             { id: 'pasca_order', label: 'Pasca Order' },
                             { id: 'live_order', label: 'Live Order' }
                         ].map((pill) => (
-                            <TouchableOpacity
+                            <FilterChip
                                 key={pill.id}
-                                style={[
-                                    styles.filterPill,
-                                    selectedFilter === pill.id && styles.filterPillActive
-                                ]}
+                                label={pill.label}
+                                selected={selectedFilter === pill.id}
+                                variant="primary"
+                                size="medium"
                                 onPress={() => handleFilterChange(pill.id)}
-                            >
-                                <Text style={[
-                                    styles.filterPillText,
-                                    selectedFilter === pill.id && styles.filterPillTextActive
-                                ]}>
-                                    {pill.label}
-                                </Text>
-                            </TouchableOpacity>
+                            />
                         ))}
                     </ScrollView>
                 </View>
@@ -452,59 +447,78 @@ function HomeScreen() {
                 <View style={{ height: Platform.OS === 'android' ? Math.max(insets.bottom, 20) + 180 : Math.max(insets.bottom, 20) + 120 }} />
             </ScrollView>
             {/* Floating Live Order button for agent, always visible */}
-            
-        {/* Modal Notifikasi */}
-        {showNotifModal && (
-            <View style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.3)',
-                justifyContent: 'center',
-                alignItems: 'center',
-                zIndex: 999,
-            }}>
+
+            {/* Modal Notifikasi */}
+            {showNotifModal && (
                 <View style={{
-                    width: '85%',
-                    maxHeight: '70%',
-                    backgroundColor: '#fff',
-                    borderRadius: 16,
-                    padding: 20,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 8,
-                    elevation: 8,
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 999,
                 }}>
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#0097A7', textAlign: 'center' }}>Notifikasi</Text>
-                    
-                    <ScrollView style={{ maxHeight: 350 }}>
-                        
-                        {listNotif.length === 0 ? (
-                            <Text style={{ textAlign: 'center', color: '#6c757d', marginTop: 32 }}>Tidak ada notifikasi</Text>
-                        ) : (
-                            listNotif.map((notif, idx) => (
-                                <View key={notif.id || idx} style={{ marginBottom: 18, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 12 }}>
-                                    <Text style={{ fontWeight: 'bold', color: '#212529', marginBottom: 4 }}>{notif.title || notif.judul || 'Notifikasi'}</Text>
-                                    <Text style={{ color: '#6c757d', marginBottom: 2 }}>{notif.body || notif.pesan || notif.text || '-'}</Text>
-                                    {notif.created_at && (
-                                        <Text style={{ fontSize: 12, color: '#adb5bd' }}>{notif.created_at}</Text>
-                                    )}
-                                </View>
-                            ))
-                        )}
-                    </ScrollView>
-                    <TouchableOpacity
-                        style={{ marginTop: 18, backgroundColor: '#0097A7', paddingVertical: 12, borderRadius: 8 }}
-                        onPress={() => setShowNotifModal(false)}
-                    >
-                        <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>Tutup</Text>
-                    </TouchableOpacity>
+                    <View style={{
+                        width: '85%',
+                        maxHeight: '70%',
+                        backgroundColor: '#fff',
+                        borderRadius: 16,
+                        padding: 20,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.2,
+                        shadowRadius: 8,
+                        elevation: 8,
+                    }}>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#0097A7', textAlign: 'center' }}>Notifikasi</Text>
+
+                        <ScrollView style={{ maxHeight: 350 }}>
+
+                            {listNotif.length === 0 ? (
+                                <Text style={{ textAlign: 'center', color: '#6c757d', marginTop: 32 }}>Tidak ada notifikasi</Text>
+                            ) : (
+                                listNotif.map((notif, idx) => (
+                                    <View key={notif.id || idx} style={{ marginBottom: 18, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 12 }}>
+                                        <Text style={{ fontWeight: 'bold', color: '#212529', marginBottom: 4 }}>{notif.title || notif.judul || 'Notifikasi'}</Text>
+                                        <Text style={{ color: '#6c757d', marginBottom: 2 }}>{notif.body || notif.pesan || notif.text || '-'}</Text>
+                                        {notif.created_at && (
+                                            <Text style={{ fontSize: 12, color: '#adb5bd' }}>{notif.created_at}</Text>
+                                        )}
+
+                                        {
+                                            JSON.parse(notif?.data).message?.data && (
+                                                <TouchableOpacity
+                                                    onPress={() => {
+                                                        JSON.parse(notif?.data).message?.data?.navigate_to === 'live-order' &&
+                                                        router.push({
+                                                            pathname: '/live-order/detail',
+                                                            params: { id: JSON.parse(notif?.data).message?.data?.transaction_id }
+                                                        });
+                                                        
+                                                    }
+                                                    }
+
+                                                    style={{ marginTop: 8, backgroundColor: '#f1f3f5', padding: 8, borderRadius: 8 }}>
+                                                    <Text style={{ fontSize: 12, color: '#495057' }}>Lihat Detail</Text>
+                                                </TouchableOpacity>
+                                            )
+                                        }
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+                        <TouchableOpacity
+                            style={{ marginTop: 18, backgroundColor: '#0097A7', paddingVertical: 12, borderRadius: 8 }}
+                            onPress={() => setShowNotifModal(false)}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>Tutup</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
-        )}
+            )}
         </View>
     );
 }
@@ -514,39 +528,23 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: 15,
         bottom: Platform.OS === 'android' ? 130 : 135,
-        // backgroundColor: 'rgba(0,151,167,0.95)',
         borderRadius: 32,
         flexDirection: 'column',
         alignItems: 'center',
         paddingVertical: 5,
         paddingHorizontal: 5,
-        // elevation: 16,
-        // shadowColor: '#000',
-        // shadowOffset: { width: 0, height: 8 },
-        // shadowOpacity: 0.35,
-        // shadowRadius: 16,
         zIndex: 100,
-        // borderWidth: 2,
-        // borderColor: 'rgba(255,255,255,0.7)',
     },
     fabPascaOrder: {
         position: 'absolute',
         right: 15,
         bottom: Platform.OS === 'android' ? 60 : 64,
-        // backgroundColor: 'rgba(0,151,167,0.95)',
         borderRadius: 32,
         flexDirection: 'column',
         alignItems: 'center',
         paddingVertical: 5,
         paddingHorizontal: 5,
-        // elevation: 16,
-        // shadowColor: '#000',
-        // shadowOffset: { width: 0, height: 8 },
-        // shadowOpacity: 0.35,
-        // shadowRadius: 16,
         zIndex: 100,
-        // borderWidth: 2,
-        // borderColor: 'rgba(255,255,255,0.7)',
     },
     fabIconContainer: {
         width: 44,
@@ -569,16 +567,19 @@ const styles = StyleSheet.create({
     },
     container: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: AuthColors.backgroundEnd,
     },
     header: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: 'rgba(0, 151, 167, 0.7)',
+        // backgroundColor: '#2AA7A1',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255, 255, 255, 0.2)',
     },
     logo: {
         fontSize: 24,
@@ -596,22 +597,10 @@ const styles = StyleSheet.create({
         position: 'relative',
         padding: 4,
     },
-    badge: {
+    notificationBadge: {
         position: 'absolute',
         top: 0,
         right: 0,
-        backgroundColor: '#dc3545',
-        borderRadius: 10,
-        minWidth: 20,
-        height: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 4,
-    },
-    badgeText: {
-        color: '#ffffff',
-        fontSize: 12,
-        fontWeight: 'bold',
     },
     profileButton: {
         position: 'relative',
@@ -652,32 +641,6 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 16,
     },
-    saldoCard: {
-        backgroundColor: '#ffffff',
-        borderRadius: 16,
-        padding: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    saldoHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    saldoLabel: {
-        fontSize: 14,
-        color: '#6c757d',
-        fontWeight: '500',
-    },
-    saldoAmount: {
-        fontSize: 32,
-        fontWeight: 'bold',
-        color: '#212529',
-    },
     menuScroll: {
         marginTop: 16,
         marginHorizontal: -16,
@@ -717,6 +680,26 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         lineHeight: 16,
     },
+    agentMenuCard: {
+        backgroundColor: 'rgba(255, 255, 255, 0.75)',
+        borderRadius: 16,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.6)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        // elevation: 4,
+    },
+    agentMenuHeader: {
+        marginBottom: 12,
+    },
+    agentMenuTitle: {
+        fontSize: 14,
+        color: '#6c757d',
+        fontWeight: '500',
+    },
     filterContainer: {
         marginTop: 16,
         marginBottom: 8,
@@ -724,27 +707,6 @@ const styles = StyleSheet.create({
     filterScrollContent: {
         paddingHorizontal: 16,
         gap: 8,
-    },
-    filterPill: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: '#f8f9fa',
-        borderWidth: 1,
-        borderColor: '#dee2e6',
-    },
-    filterPillActive: {
-        backgroundColor: '#0097A7',
-        borderColor: '#0097A7',
-    },
-    filterPillText: {
-        fontSize: 14,
-        color: '#6c757d',
-        fontWeight: '500',
-    },
-    filterPillTextActive: {
-        color: '#ffffff',
-        fontWeight: '600',
     },
 });
 

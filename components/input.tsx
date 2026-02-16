@@ -1,22 +1,34 @@
-import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
+import { StyleProp, StyleSheet, Text, TextInput, TextInputProps, TextStyle, View, ViewStyle } from 'react-native';
 
 interface InputProps extends TextInputProps {
     label?: string;
     error?: string;
     editable?: boolean;
+    containerStyle?: StyleProp<ViewStyle>;
+    labelStyle?: StyleProp<TextStyle>;
+    errorStyle?: StyleProp<TextStyle>;
 }
 
-export default function Input({ label, error, editable = true, style, ...props }: InputProps) {
+export default function Input({
+    label,
+    error,
+    editable = true,
+    style,
+    containerStyle,
+    labelStyle,
+    errorStyle,
+    ...props
+}: InputProps) {
     return (
-        <View style={styles.container}>
-            {label && <Text style={styles.label}>{label}</Text>}
+        <View style={[styles.container, containerStyle]}>
+            {label && <Text style={[styles.label, labelStyle]}>{label}</Text>}
             <TextInput
                 style={[styles.input, error && styles.inputError, !editable && styles.inputDisabled, style]}
                 placeholderTextColor="#999"
                 editable={editable}
                 {...props}
             />
-            {error && <Text style={styles.errorText}>{error}</Text>}
+            {error && <Text style={[styles.errorText, errorStyle]}>{error}</Text>}
         </View>
     );
 }

@@ -234,17 +234,50 @@ class FirebaseService {
       return () => {}; // Return empty unsubscribe function
     }
 
-    // Foreground messages
+    // Foreground messages (app is open)
     const unsubscribe = messaging.onMessage(async (remoteMessage) => {
+      console.log('📱 Foreground notification received:', remoteMessage);
       callback(remoteMessage);
     });
 
-    // Background messages (handled by system)
+    // Background messages (app is closed/minimized)
     messaging.setBackgroundMessageHandler(async (remoteMessage) => {
+      console.log('📱 Background notification received:', remoteMessage);
       callback(remoteMessage);
     });
 
     return unsubscribe;
+  }
+
+  // Handle notification open/click (status bar)
+  async setupNotificationOpenedAppListener(navigationCallback) {
+    const messaging = await getMessagingInstance();
+    if (!messaging) {
+      console.warn('Push notifications not available for open listener');
+      return;
+    }
+
+    // Called when notification is tapped from background/closed state
+    messaging.onNotificationOpenedApp((remoteMessage) => {
+      console.log('📲 Notification opened from background:', remoteMessage);
+      
+      if (remoteMessage?.data?.navigate_to) {
+        navigationCallback({
+          route: remoteMessage.data.navigate_to,
+          params: remoteMessage.data
+        });
+      }
+    });
+
+    // Called if notification caused app to open from Completely closed state
+    const initialMessage = await messaging.getInitialNotification();
+    if (initialMessage && initialMessage?.data?.navigate_to) {
+      console.log('📲 App opened from notification (closed state):', initialMessage);
+      navigationCallback({
+        route: initialMessage.data.navigate_to,
+        params: initialMessage.data
+      });
+    }
   }
 }
 
