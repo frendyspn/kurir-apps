@@ -15,7 +15,7 @@ export default function TabLayout() {
         <SafeAreaView style={{ flex: 1, backgroundColor: '#ffffff' }} edges={['left', 'right']}>
             <Tabs
                 screenOptions={{
-                    tabBarActiveTintColor: '#0097A7',
+                    tabBarActiveTintColor: '#2AA7A1',
                     tabBarInactiveTintColor: '#8e8e93',
                     headerShown: false,
                     tabBarButton: HapticTab,

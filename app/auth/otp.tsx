@@ -3,7 +3,8 @@ import { apiService } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Button, KeyboardAvoidingView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Button from '../../components/button';
 import GlassBackground from '../../components/glass-background';
 import { AuthColors } from '../../constants/theme';
 

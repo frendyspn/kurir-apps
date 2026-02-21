@@ -17,6 +17,7 @@ export default function KontakScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredContacts, setFilteredContacts] = useState<any[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
+    const [showDownlineOnly, setShowDownlineOnly] = useState(false);
     const searchTimeoutRef = React.useRef<NodeJS.Timeout | number | null>(null);
 
     useEffect(() => {
@@ -66,6 +67,20 @@ export default function KontakScreen() {
         };
     }, [navigation]);
 
+    // Sync filteredContacts with contacts when search is empty
+    useEffect(() => {
+        if (searchQuery.trim() === '') {
+            let filtered = contacts;
+            
+            // Apply is_downline filter
+            if (showDownlineOnly) {
+                filtered = contacts.filter((item: any) => item.is_downline === true);
+            }
+            
+            setFilteredContacts(filtered);
+        }
+    }, [contacts, showDownlineOnly]);
+
     // Search contacts with debouncing
     useEffect(() => {
         if (searchTimeoutRef.current) {
@@ -73,16 +88,29 @@ export default function KontakScreen() {
         }
 
         if (searchQuery.trim() === '') {
-            setFilteredContacts(contacts);
+            let filtered = contacts;
+            
+            // Apply is_downline filter
+            if (showDownlineOnly) {
+                filtered = contacts.filter((item: any) => item.is_downline === true);
+            }
+            
+            setFilteredContacts(filtered);
             setSearchLoading(false);
         } else {
             setSearchLoading(true);
             searchTimeoutRef.current = setTimeout(async () => {
                 try {
-                    const response = await apiService.searchKonsumen(searchQuery);
+                    const response = await apiService.searchKonsumen(searchQuery, idKonsumen);
                     if (response.success && response.data) {
-                        const searchResults = Array.isArray(response.data) ? response.data : 
+                        let searchResults = Array.isArray(response.data) ? response.data : 
                                             Array.isArray(response.data?.data) ? response.data.data : [];
+                        
+                        // Apply is_downline filter
+                        if (showDownlineOnly) {
+                            searchResults = searchResults.filter((item: any) => item.is_downline === true);
+                        }
+                        
                         setFilteredContacts(searchResults);
                     } else {
                         setFilteredContacts([]);
@@ -95,7 +123,7 @@ export default function KontakScreen() {
                 }
             }, 1500); // Debounce 1.5 detik untuk menghindari too many requests
         }
-    }, [searchQuery]);
+    }, [searchQuery, showDownlineOnly]);
 
     const fetchContacts = useCallback(async (id: string) => {
         try {
@@ -147,14 +175,15 @@ export default function KontakScreen() {
     };
 
     const renderContactItem = ({ item }: { item: any }) => (
-        <TouchableOpacity style={styles.contactItem} onPress={() => handleContactPress(item)}>
+        <TouchableOpacity style={[styles.contactItem, item.is_downline ? styles.downlineItem : null]} onPress={() => handleContactPress(item)}>
             <View style={styles.contactInfo}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={styles.contactName}>{item.nama_lengkap}</Text>
-                    {item.is_downline && <Ionicons name="person-add" size={14} color="#0097A7" />}
+                    {/* {item.is_downline && <Ionicons name="person-add" size={14} color="#0097A7" />} */}
                 </View>
                 <Text style={styles.contactPhone}>{item.no_hp}</Text>
                 <Text style={styles.contactDescription}>{item.alamat_lengkap}</Text>
+                {/* <Text style={styles.contactPhone}>{item.is_downline ? 'Downline' : 'Bukan Downline'}</Text> */}
             </View>
             <TouchableOpacity style={styles.arrowButton}>
                 <Ionicons name="chevron-forward" size={20} color="#6c757d" />
@@ -168,6 +197,25 @@ export default function KontakScreen() {
             <View style={styles.header}>
                 <Text style={styles.logo}>Kontak</Text>
                 <View style={styles.headerButtons}>
+                    <TouchableOpacity
+                        onPress={() => setShowDownlineOnly(!showDownlineOnly)}
+                        style={[
+                            styles.filterButton,
+                            showDownlineOnly && styles.filterButtonActive
+                        ]}
+                    >
+                        <Ionicons 
+                            name={showDownlineOnly ? "funnel" : "funnel-outline"} 
+                            size={18} 
+                            color={showDownlineOnly ? "#ffffff" : "#0097A7"} 
+                        />
+                        <Text style={[
+                            styles.filterButtonText,
+                            showDownlineOnly && styles.filterButtonTextActive
+                        ]}>
+                            Downline
+                        </Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                         onPress={() => router.push('/kontak/import')}
                         style={styles.importButton}
@@ -273,6 +321,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
+    filterButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: '#ffffff',
+    },
+    filterButtonActive: {
+        backgroundColor: '#0097A7',
+    },
+    filterButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#0097A7',
+    },
+    filterButtonTextActive: {
+        color: '#ffffff',
+    },
     importButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -298,7 +366,7 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         padding: 16,
-        marginBottom: 90,
+        marginBottom: 50,
     },
     searchContainer: {
         backgroundColor: '#ffffff',
@@ -337,6 +405,21 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
+    },
+    downlineItem: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+        borderColor: '#0097A7',
+        borderWidth: 6,
     },
     contactInfo: {
         flex: 1,

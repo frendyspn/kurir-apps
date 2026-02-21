@@ -1,5 +1,6 @@
 import DatePickerInput from '@/components/date-picker-input';
 import DropdownInput from '@/components/dropdown-input';
+import GlassBackground from '@/components/glass-background';
 import PelangganSearchInput from '@/components/pelanggan-search-input';
 import { apiService } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
@@ -128,7 +129,7 @@ export default function TambahTransaksiScreen() {
                         value: item.id_konsumen || item.id,
                         data: item, // Store full data
                     }));
-                    
+                    console.log('Pelanggan options:', options);
                     setPelangganOptions(options);
                 } else {
                     console.error('Pelanggan data is not an array:', pelangganData);
@@ -142,7 +143,7 @@ export default function TambahTransaksiScreen() {
     };
 
     // Handler untuk pelanggan, menerima value dan label
-    const handlePelangganChange = (value: string, label: string, data?: { id_konsumen: string, nama_lengkap: string, no_hp: string, is_favorite?: boolean, is_favorite_list?: boolean }) => {
+    const handlePelangganChange = (value: string, label: string, data?: { id_konsumen: string, nama_lengkap: string, no_hp: string, alamat_lengkap?: string, is_favorite?: boolean, is_favorite_list?: boolean }) => {
         console.log('Pelanggan changed:', data);
         setPelanggan(value);
         setPelangganLabel(label);
@@ -166,7 +167,7 @@ export default function TambahTransaksiScreen() {
                     nama = match[1].trim();
                     no_hp = match[2].trim();
                 }
-                setPelangganData({ id_konsumen: value, nama_lengkap: nama, no_hp });
+                setPelangganData({ id_konsumen: value, nama_lengkap: nama, no_hp, alamat_lengkap: '' });
                 otomatis = false;
             }
         }
@@ -290,6 +291,7 @@ export default function TambahTransaksiScreen() {
 
     return (
         <View style={styles.container}>
+            <GlassBackground />
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity 
@@ -328,7 +330,7 @@ export default function TambahTransaksiScreen() {
                         </View>
                     ) : (
                         <DropdownInput
-                            label="Agen Kurir"
+                            label="Agen Kurir (Pemberi Order)"
                             value={agenKurir}
                             onChange={setAgenKurir}
                             options={agenOptions}
@@ -441,7 +443,22 @@ export default function TambahTransaksiScreen() {
 
                     {/* Alamat Jemput */}
                     <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Alamat Penjemputan *</Text>
+                        <View style={styles.inputLabelRow}>
+                            <Text style={styles.inputLabel}>Alamat Penjemputan *</Text>
+                            <TouchableOpacity
+                                style={styles.fillAddressButton}
+                                onPress={() => {
+                                    const alamat = pelangganData?.alamat_lengkap || pelangganData?.alamat || '';
+                                    if (!alamat) {
+                                        alert('Alamat pelanggan tidak tersedia');
+                                        return;
+                                    }
+                                    setAlamatJemput(alamat);
+                                }}
+                            >
+                                <Text style={styles.fillAddressText}>Ambil Alamat Customer</Text>
+                            </TouchableOpacity>
+                        </View>
                         <TextInput
                             style={[styles.textInput, styles.textArea]}
                             value={alamatJemput}
@@ -473,7 +490,22 @@ export default function TambahTransaksiScreen() {
 
                     {/* Alamat Antar */}
                     <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Alamat Antar *</Text>
+                        <View style={styles.inputLabelRow}>
+                            <Text style={styles.inputLabel}>Alamat Antar *</Text>
+                            <TouchableOpacity
+                                style={styles.fillAddressButton}
+                                onPress={() => {
+                                    const alamat = pelangganData?.alamat_lengkap || pelangganData?.alamat || '';
+                                    if (!alamat) {
+                                        alert('Alamat pelanggan tidak tersedia');
+                                        return;
+                                    }
+                                    setAlamatAntar(alamat);
+                                }}
+                            >
+                                <Text style={styles.fillAddressText}>Ambil Alamat Customer</Text>
+                            </TouchableOpacity>
+                        </View>
                         <TextInput
                             style={[styles.textInput, styles.textArea]}
                             value={alamatAntar}
@@ -548,10 +580,10 @@ export default function TambahTransaksiScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
+        // backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -626,6 +658,26 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#212529',
         marginBottom: 8,
+    },
+    inputLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        marginBottom: 8,
+    },
+    fillAddressButton: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: '#e7f3ff',
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#0097A7',
+    },
+    fillAddressText: {
+        fontSize: 12,
+        color: '#0097A7',
+        fontWeight: '600',
     },
     textInput: {
         backgroundColor: '#ffffff',

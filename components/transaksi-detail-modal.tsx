@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { memo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
+import GlassBackground from './glass-background';
 
 interface TransaksiDetailModalProps {
     transaksi: any;
@@ -122,39 +122,52 @@ const TransaksiDetailModal = memo(({
 
     // Fetch komisi data ketika status = FINISH
     useEffect(() => {
-        if (currentTransaksi.status?.toUpperCase() === 'FINISH' && currentTransaksi.id) {
-            setIsLoadingKomisi(true);
-            apiService.getKomisi(currentTransaksi.id || currentTransaksi.id_transaksi)
-                .then(response => {
-                    if (response.success && response.data) {
-                        let komisiArray = [];
-                        
-                        if (Array.isArray(response.data)) {
-                            komisiArray = response.data;
-                        } else if (response.data.komisi && Array.isArray(response.data.komisi)) {
-                            komisiArray = response.data.komisi;
-                        } else if (response.data.data && Array.isArray(response.data.data)) {
-                            komisiArray = response.data.data;
+        
+        const fetchKomisiData = async () => {
+            const userData = await AsyncStorage.getItem('userData');
+            let id_konsumen = null;
+            
+            if (userData) {
+                const parsedData = JSON.parse(userData);
+                id_konsumen = parsedData.id_konsumen;
+            }
+
+            if (currentTransaksi.status?.toUpperCase() === 'FINISH' && currentTransaksi.id) {
+                setIsLoadingKomisi(true);
+                apiService.getKomisi(currentTransaksi.id || currentTransaksi.id_transaksi, id_konsumen)
+                    .then(response => {
+                        if (response.success && response.data) {
+                            let komisiArray = [];
+                            
+                            if (Array.isArray(response.data)) {
+                                komisiArray = response.data;
+                            } else if (response.data.komisi && Array.isArray(response.data.komisi)) {
+                                komisiArray = response.data.komisi;
+                            } else if (response.data.data && Array.isArray(response.data.data)) {
+                                komisiArray = response.data.data;
+                            }
+                            
+                            console.log('✅ Komisi data fetched:', komisiArray);
+                            setKomisiData(komisiArray);
+                        } else {
+                            console.log('⚠️ No komisi data found or API error');
+                            setKomisiData([]);
                         }
-                        
-                        console.log('✅ Komisi data fetched:', komisiArray);
-                        setKomisiData(komisiArray);
-                    } else {
-                        console.log('⚠️ No komisi data found or API error');
+                    })
+                    .catch(error => {
+                        console.error('❌ Error fetching komisi data:', error);
                         setKomisiData([]);
-                    }
-                })
-                .catch(error => {
-                    console.error('❌ Error fetching komisi data:', error);
-                    setKomisiData([]);
-                })
-                .finally(() => {
-                    setIsLoadingKomisi(false);
-                });
-        } else {
-            setKomisiData([]);
-            setIsLoadingKomisi(false);
-        }
+                    })
+                    .finally(() => {
+                        setIsLoadingKomisi(false);
+                    });
+            } else {
+                setKomisiData([]);
+                setIsLoadingKomisi(false);
+            }
+        };
+
+        fetchKomisiData();
     }, [currentTransaksi.id, currentTransaksi.status]);
 
     // Fetch potongan admin data ketika status = FINISH
@@ -705,6 +718,7 @@ const TransaksiDetailModal = memo(({
 
     return (
         <View style={styles.modalContainer}>
+            <GlassBackground />
             {/* Modal Header - Only show if not in page mode */}
             {!isPageMode && (
                 <View style={styles.modalHeader}>
@@ -1121,7 +1135,7 @@ const TransaksiDetailModal = memo(({
                                 const trxType = komisi.trx_type || komisi.type || 'credit';
                                 const note = komisi.note || '';
                                 const createdAt = komisi.created_at || komisi.date || '';
-                                
+                                console.log(komisi);
                                 // Format date
                                 let formattedDate = '';
                                 if (createdAt) {
@@ -1146,9 +1160,13 @@ const TransaksiDetailModal = memo(({
                                                 <Text style={styles.komisiNote}>
                                                     {note || `Komisi ${trxType === 'credit' ? 'Pemasukan' : 'Pengeluaran'}`}
                                                 </Text>
+                                                {komisi.superadmin_view && komisi.nama_lengkap && (
+                                                    <Text style={[styles.komisiDate, {fontWeight: 'bold'}]}>{komisi.nama_lengkap}</Text>
+                                                )}
                                                 {formattedDate && (
                                                     <Text style={styles.komisiDate}>{formattedDate}</Text>
                                                 )}
+                                                
                                             </View>
                                             <View style={styles.komisiAmountContainer}>
                                                 <Text style={[
@@ -1534,10 +1552,10 @@ const styles = StyleSheet.create({
     },
     modalContainer: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
+        // backgroundColor: '#f8f9fa',
     },
     modalHeader: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,

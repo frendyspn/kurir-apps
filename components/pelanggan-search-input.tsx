@@ -16,7 +16,7 @@ import Input from './input';
 interface PelangganSearchInputProps {
     label: string;
     value: string;
-    onChange: (value: string, label: string, data?: { id_konsumen: string, nama_lengkap: string, no_hp: string, is_favorite?: boolean, is_favorite_list?: boolean }) => void;
+    onChange: (value: string, label: string, data?: { id_konsumen: string, nama_lengkap: string, no_hp: string, alamat_lengkap?: string, is_favorite?: boolean, is_favorite_list?: boolean }) => void;
     onSearch: (query: string) => Promise<void>;
     onClearResults?: () => void;
     options: Array<{ label: string; value: string }>;
@@ -43,8 +43,9 @@ export default function PelangganSearchInput({
     const [showTambahForm, setShowTambahForm] = useState(false);
     const [namaBaru, setNamaBaru] = useState('');
     const [noHpBaru, setNoHpBaru] = useState('');
+    const [alamatBaru, setAlamatBaru] = useState('');
     const [loadingTambah, setLoadingTambah] = useState(false);
-    const [favoriteOptions, setFavoriteOptions] = useState<Array<{ label: string; value: string; no_hp: string; is_favorite?: boolean; is_favorite_list?: boolean }>>([]);
+    const [favoriteOptions, setFavoriteOptions] = useState<Array<{ label: string; value: string; no_hp: string; alamat_lengkap?: string; is_favorite?: boolean; is_favorite_list?: boolean }>>([]);
     const [loadingFavorite, setLoadingFavorite] = useState(false);
     // Fetch pelanggan favorit saat modal dibuka
     useEffect(() => {
@@ -69,6 +70,7 @@ export default function PelangganSearchInput({
                             label: item.nama_lengkap || item.nama || item.no_hp,
                             value: item.id_konsumen || item.id,
                             no_hp: item.no_hp || '',
+                            alamat_lengkap: item.alamat_lengkap || item.alamat || '',
                             is_favorite: item.is_favorite ?? true,
                             is_favorite_list: true,
                         })));
@@ -101,6 +103,7 @@ export default function PelangganSearchInput({
                 id_konsumen: fav.value,
                 nama_lengkap: fav.label,
                 no_hp: fav.no_hp,
+                alamat_lengkap: fav.alamat_lengkap || '',
                 is_favorite: fav.is_favorite ?? true,
                 is_favorite_list: true,
             });
@@ -113,6 +116,7 @@ export default function PelangganSearchInput({
                     id_konsumen: d.id_konsumen || d.id,
                     nama_lengkap: d.nama_lengkap || d.nama || d.no_hp,
                     no_hp: d.no_hp || '',
+                    alamat_lengkap: d.alamat_lengkap || d.alamat || '',
                     is_favorite: d.is_favorite,
                     is_favorite_list: d.is_favorite_list,
                 });
@@ -132,6 +136,7 @@ export default function PelangganSearchInput({
         setShowTambahForm(false);
         setNamaBaru('');
         setNoHpBaru('');
+        setAlamatBaru('');
         if (onClearResults) {
             onClearResults();
         }
@@ -147,8 +152,8 @@ export default function PelangganSearchInput({
 
     // Handler tambah pelanggan baru
     const handleTambahPelanggan = async () => {
-        if (!namaBaru.trim() || !noHpBaru.trim()) {
-            Alert.alert('Error', 'Nama dan No HP wajib diisi');
+        if (!namaBaru.trim() || !noHpBaru.trim() || !alamatBaru.trim()) {
+            Alert.alert('Error', 'Nama, No HP, dan Alamat wajib diisi');
             return;
         }
         setLoadingTambah(true);
@@ -166,17 +171,19 @@ export default function PelangganSearchInput({
             const result = await apiService.addKonsumen({
                 nama_lengkap: namaBaru,
                 no_hp: noHpBaru,
-                alamat_lengkap: '-',
+                alamat_lengkap: alamatBaru.trim() || '-',
                 id_konsumen,
             });
-            if (result.success && result.data) {
+            
+            if (result.success && result.data.data) {
                 // Pilih pelanggan baru otomatis
-                onChange(result.data.id_konsumen || result.data.id, result.data.nama_lengkap || result.data.nama || result.data.no_hp);
+                onChange(result.data.data.id_konsumen || result.data.data.id, result.data.data.nama_lengkap || result.data.data.nama || result.data.data.no_hp);
                 setModalVisible(false);
                 setSearchQuery('');
                 setShowTambahForm(false);
                 setNamaBaru('');
                 setNoHpBaru('');
+                setAlamatBaru('');
                 Alert.alert('Berhasil', 'Pelanggan berhasil ditambahkan');
             } else {
                 Alert.alert('Error', result.message || 'Gagal menambah pelanggan');
@@ -275,6 +282,17 @@ export default function PelangganSearchInput({
                                     keyboardType="phone-pad"
                                     style={{ marginBottom: 8 }}
                                 />
+                                <Input
+                                    label="Alamat Pelanggan"
+                                    value={alamatBaru}
+                                    onChangeText={setAlamatBaru}
+                                    placeholder="Alamat Pelanggan"
+                                    autoCapitalize="words"
+                                    multiline
+                                    numberOfLines={3}
+                                    style={{ marginBottom: 8, height: 80, textAlignVertical: 'top' }}
+                                />
+                                
                                 <TouchableOpacity
                                     style={{
                                         backgroundColor: '#0097A7',

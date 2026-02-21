@@ -1,5 +1,6 @@
 import DatePickerInput from '@/components/date-picker-input';
 import DropdownInput from '@/components/dropdown-input';
+import GlassBackground from '@/components/glass-background';
 import SearchInput from '@/components/search-input';
 import TransaksiDetailModal from '@/components/transaksi-detail-modal';
 import { apiService } from '@/services/api';
@@ -371,6 +372,7 @@ export default function TransaksiManualScreen() {
 
     return (
         <View style={styles.container}>
+            <GlassBackground/>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
@@ -561,7 +563,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,

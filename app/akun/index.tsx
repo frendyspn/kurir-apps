@@ -1,3 +1,4 @@
+import GlassBackground from '@/components/glass-background';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -67,7 +68,8 @@ function AkunScreen() {
     ];
 
     return (
-            <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <SafeAreaView style={styles.container} edges={['left', 'right']}>
+            <GlassBackground />
                 <ProfileModal visible={showProfileModal} onClose={() => setShowProfileModal(false)} onSave={handleProfileSave} />
                 <KendaraanModal visible={showKendaraanModal} onClose={() => setShowKendaraanModal(false)} />
             {/* Header */}
@@ -146,7 +148,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,

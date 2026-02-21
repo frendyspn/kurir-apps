@@ -7,9 +7,10 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import GlassBackground from '@/components/glass-background';
 import { apiService } from '@/services/api';
 
-// Simple vCard parser
+// Contact interface
 interface ParsedContact {
     nama_lengkap: string;
     no_hp: string;
@@ -17,6 +18,60 @@ interface ParsedContact {
     alamat_lengkap?: string;
 }
 
+// CSV Parser
+function parseCSV(csvContent: string): ParsedContact[] {
+    const contacts: ParsedContact[] = [];
+    const lines = csvContent.split('\n').map(line => line.trim()).filter(line => line);
+    
+    if (lines.length < 2) return contacts; // No data rows
+    
+    // Parse header to find column indices
+    const headers = lines[0].split(',').map(h => h.trim());
+    const firstNameIdx = headers.findIndex(h => h.toLowerCase().includes('first name'));
+    const middleNameIdx = headers.findIndex(h => h.toLowerCase().includes('middle name'));
+    const lastNameIdx = headers.findIndex(h => h.toLowerCase().includes('last name'));
+    const phoneIdx = headers.findIndex(h => h.toLowerCase().includes('phone') && h.toLowerCase().includes('value'));
+    const emailIdx = headers.findIndex(h => h.toLowerCase() === 'email' || h.toLowerCase().includes('e-mail'));
+    const notesIdx = headers.findIndex(h => h.toLowerCase() === 'notes');
+    const orgIdx = headers.findIndex(h => h.toLowerCase().includes('organization name'));
+    
+    // Parse data rows
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        
+        // Build full name
+        const nameParts = [
+            firstNameIdx >= 0 ? values[firstNameIdx] : '',
+            middleNameIdx >= 0 ? values[middleNameIdx] : '',
+            lastNameIdx >= 0 ? values[lastNameIdx] : ''
+        ].filter(part => part);
+        
+        const nama_lengkap = nameParts.join(' ').trim();
+        const no_hp = phoneIdx >= 0 ? values[phoneIdx]?.replace(/[^0-9+]/g, '').trim() : '';
+        const email = emailIdx >= 0 ? values[emailIdx]?.trim() : '';
+        
+        // Build address from organization or notes
+        const alamatParts = [
+            orgIdx >= 0 ? values[orgIdx] : '',
+            notesIdx >= 0 ? values[notesIdx] : ''
+        ].filter(part => part);
+        const alamat_lengkap = alamatParts.join(', ').trim();
+        
+        // Only add if name and phone exist
+        if (nama_lengkap && no_hp) {
+            contacts.push({
+                nama_lengkap,
+                no_hp,
+                email: email || '',
+                alamat_lengkap: alamat_lengkap || ''
+            });
+        }
+    }
+    
+    return contacts;
+}
+
+// VCard Parser
 function parseVCard(vcfContent: string): ParsedContact[] {
     const contacts: ParsedContact[] = [];
     const vcards = vcfContent.split('BEGIN:VCARD');
@@ -82,7 +137,7 @@ export default function ImportKontakScreen() {
     const handlePickFile = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
-                type: ['text/vcard', 'text/x-vcard', '*/*'],
+                type: ['text/vcard', 'text/x-vcard', 'text/csv', 'text/comma-separated-values', '*/*'],
                 copyToCacheDirectory: true,
             });
 
@@ -100,8 +155,9 @@ export default function ImportKontakScreen() {
             }
 
             // Check file extension
-            if (!file.name.toLowerCase().endsWith('.vcf')) {
-                Alert.alert('Error', 'Hanya file .vcf yang didukung');
+            const fileName = file.name.toLowerCase();
+            if (!fileName.endsWith('.vcf') && !fileName.endsWith('.csv')) {
+                Alert.alert('Error', 'Hanya file .vcf atau .csv yang didukung');
                 return;
             }
 
@@ -113,9 +169,15 @@ export default function ImportKontakScreen() {
                 const content = await FileSystem.readAsStringAsync(file.uri);
                 console.log('File content length:', content.length);
 
-                // Parse vCard
-                const contacts = parseVCard(content);
-                console.log('Parsed contacts:', contacts.length);
+                // Parse based on file type
+                let contacts: ParsedContact[] = [];
+                if (fileName.endsWith('.vcf')) {
+                    contacts = parseVCard(content);
+                    console.log('Parsed vCard contacts:', contacts.length);
+                } else if (fileName.endsWith('.csv')) {
+                    contacts = parseCSV(content);
+                    console.log('Parsed CSV contacts:', contacts.length);
+                }
 
                 if (contacts.length === 0) {
                     Alert.alert('Error', 'Tidak ada kontak yang valid ditemukan dalam file');
@@ -239,8 +301,9 @@ export default function ImportKontakScreen() {
 
     return (
         <>
-
+            
             <SafeAreaView style={styles.container} edges={['bottom']}>
+                <GlassBackground />
                 {/* Header Custom */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.replace('/(tabs)/kontak')} style={styles.headerBackButton}>
@@ -254,8 +317,8 @@ export default function ImportKontakScreen() {
                         <Ionicons name="information-circle" size={32} color="#0097A7" />
                         <Text style={styles.instructionTitle}>Cara Import Kontak</Text>
                         <View style={styles.instructionList}>
-                            <Text style={styles.instructionItem}>1. Export kontak dari perangkat Android ke file .vcf</Text>
-                            <Text style={styles.instructionItem}>2. Pilih file .vcf yang telah di-export</Text>
+                            <Text style={styles.instructionItem}>1. Export kontak dari perangkat Android ke file .vcf atau .csv</Text>
+                            <Text style={styles.instructionItem}>2. Pilih file .vcf atau .csv yang telah di-export</Text>
                             <Text style={styles.instructionItem}>3. Tekan "Import" untuk menyimpan kontak</Text>
                         </View>
                     </View>
@@ -267,7 +330,7 @@ export default function ImportKontakScreen() {
                         disabled={loading}
                     >
                         <Ionicons name="folder-open" size={24} color="#ffffff" />
-                        <Text style={styles.pickButtonText}>Pilih File .vcf</Text>
+                        <Text style={styles.pickButtonText}>Pilih File .vcf atau .csv</Text>
                     </TouchableOpacity>
 
                     {/* Selected File Info */}
@@ -380,7 +443,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8f9fa',
     },
     header: {
-        backgroundColor: '#0097A7',
+        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,

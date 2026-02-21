@@ -634,9 +634,10 @@ class ApiService {
     }
 
     // Search konsumen by keyword
-    async searchKonsumen(keyword: string): Promise<ApiResponse> {
+    async searchKonsumen(keyword: string, idKonsumen: string): Promise<ApiResponse> {
         const formData = new FormData();
         formData.append('keyword', keyword);
+        formData.append('id_konsumen', idKonsumen);
 
         return this.request(API_ENDPOINTS.SEARCH_KONSUMEN, {
             method: 'POST',
@@ -1115,9 +1116,10 @@ class ApiService {
     }
 
     // Get Komisi data untuk transaksi yang sudah FINISH
-    async getKomisi(idTransaksi: string): Promise<ApiResponse> {
+    async getKomisi(idTransaksi: string, idKonsumen: string): Promise<ApiResponse> {
         const formData = new FormData();
         formData.append('id_transaksi', idTransaksi);
+        formData.append('id_user', idKonsumen);
 
         return this.request(API_ENDPOINTS.GET_KOMISI, {
             method: 'POST',
