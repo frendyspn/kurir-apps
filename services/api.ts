@@ -294,6 +294,78 @@ class ApiService {
         });
     }
 
+    async updateStatusOnline(no_hp: string, is_online: 0 | 1): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', no_hp);
+        formData.append('is_online', String(is_online));
+
+        return this.request(API_ENDPOINTS.UPDATE_STATUS_ONLINE, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    async getRekapOnline(no_hp: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', no_hp);
+
+        return this.request(API_ENDPOINTS.REKAP_ONLINE, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    async getStatistikRingkas(no_hp: string, type?: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', no_hp);
+        if (type) {
+            formData.append('type', type);
+        }
+
+        return this.request(API_ENDPOINTS.STATISTIK_RINGKAS, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    async exportStatistikExcel(no_hp: string, type?: string, startDate?: string, endDate?: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', no_hp);
+        if (type) {
+            formData.append('type', type);
+        }
+        if (startDate) {
+            formData.append('start_date', startDate);
+        }
+        if (endDate) {
+            formData.append('end_date', endDate);
+        }
+
+        return this.request(API_ENDPOINTS.EXPORT_STATISTIK_EXCEL, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    async exportStatistikPdf(no_hp: string, type?: string, startDate?: string, endDate?: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('no_hp', no_hp);
+        if (type) {
+            formData.append('type', type);
+        }
+        if (startDate) {
+            formData.append('start_date', startDate);
+        }
+        if (endDate) {
+            formData.append('end_date', endDate);
+        }
+
+        return this.request(API_ENDPOINTS.EXPORT_STATISTIK_PDF, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
 
     // Cek No HP Registration
     async cekNoHpRegistration(phoneNumber: string): Promise<ApiResponse> {

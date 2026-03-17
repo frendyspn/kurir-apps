@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { memo, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Clipboard, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import GlassBackground from './glass-background';
 
 interface TransaksiDetailModalProps {
@@ -474,7 +474,7 @@ const TransaksiDetailModal = memo(({
                 id_sopir: currentTransaksi.id_sopir || '-',
                 no_hp: userData.no_hp,
                 biaya_antar: currentTransaksi.tarif || '0',
-                agen_kurir: currentTransaksi.agen_kurir || '-' // Pastikan field ini ada di transaksi data
+                agen_kurir: currentTransaksi.id_agen || '-' // Pastikan field ini ada di transaksi data
             };
 
             const response = await apiService.approveTransaksi(requestData);
@@ -716,6 +716,18 @@ const TransaksiDetailModal = memo(({
         }
     };
 
+    const handleShare = async () => {
+            try {
+                const encodedId = btoa(currentTransaksi.id); // Base64 encode the ID
+                const shareLink = `https://mitra.klikquick.id/app/live-order/${encodedId}`;
+                await Clipboard.setString(shareLink);
+                Alert.alert('Berhasil', 'Link berhasil disalin ke clipboard');
+            } catch (error) {
+                console.error('Error copying to clipboard:', error);
+                Alert.alert('Error', 'Gagal menyalin link');
+            }
+        };
+
     return (
         <View style={styles.modalContainer}>
             <GlassBackground />
@@ -725,7 +737,7 @@ const TransaksiDetailModal = memo(({
                     <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
                         <Ionicons name="close" size={28} color="#ffffff" />
                     </TouchableOpacity>
-                    <Text style={styles.modalHeaderTitle}>Detail Transaksi</Text>
+                    <Text style={styles.modalHeaderTitle}>Detail Transaksiii</Text>
                     <View style={styles.headerRight}>
                         {/* Socket Connection Status */}
                         <View style={[
@@ -738,7 +750,14 @@ const TransaksiDetailModal = memo(({
                                 <Ionicons name="refresh" size={16} color="#ffffff" />
                             </View>
                         )}
+                        
                     </View>
+                    <TouchableOpacity
+                                            style={styles.shareButton}
+                                            onPress={handleShare}
+                                        >
+                                            <Ionicons name="link-outline" size={24} color="#ffffff" />
+                                        </TouchableOpacity>
                     {/* Status Update Indicator */}
                     {isStatusUpdating && (
                         <View style={styles.statusUpdateIndicator}>
@@ -964,6 +983,56 @@ const TransaksiDetailModal = memo(({
                     </View>
 
 
+                    {/* Payment Info */}
+                    <View style={styles.modalSection}>
+                        <View style={styles.modalSectionHeader}>
+                            <Ionicons name="wallet-outline" size={20} color="#0097A7" />
+                            <Text style={styles.modalSectionTitle}>Informasi Pembayaran</Text>
+                        </View>
+
+                        {currentTransaksi.id_penjualan && produkData.length > 0 && (
+                            <>
+                                <View style={styles.paymentRow}>
+                                    <Text style={styles.paymentLabel}>Total Produk</Text>
+                                    <Text style={styles.paymentValue}>
+                                        {formatCurrency(
+                                            produkData.reduce((total, produk) => {
+                                                const qty = parseInt(produk.qty || produk.quantity || 1);
+                                                const hargaSatuan = parseInt(produk.harga || produk.harga_satuan || produk.price || 0);
+                                                return total + (qty * hargaSatuan);
+                                            }, 0)
+                                        )}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.modalDivider} />
+                            </>
+                        )}
+
+                        <View style={styles.paymentRow}>
+                            <Text style={styles.paymentLabel}>Biaya Antar</Text>
+                            <Text style={styles.paymentValue}>{formatCurrency(currentTransaksi.tarif)}</Text>
+                        </View>
+
+                        <View style={styles.modalDivider} />
+
+                        <View style={styles.totalRow}>
+                            <Text style={styles.totalLabel}>Total Pembayaran</Text>
+                            <Text style={styles.totalValue}>
+                                {formatCurrency(
+                                    (currentTransaksi.id_penjualan && produkData.length > 0 ?
+                                        produkData.reduce((total, produk) => {
+                                            const qty = parseInt(produk.qty || produk.quantity || 1);
+                                            const hargaSatuan = parseInt(produk.harga || produk.harga_satuan || produk.price || 0);
+                                            return total + (qty * hargaSatuan);
+                                        }, 0)
+                                        : 0) + parseInt(currentTransaksi.tarif || '0')
+                                )}
+                            </Text>
+                        </View>
+                    </View>
+
+
                     {/* Customer Info */}
                     <View style={styles.modalSection}>
                         <View style={styles.modalSectionHeader}>
@@ -1065,55 +1134,6 @@ const TransaksiDetailModal = memo(({
                         )}
                     </View>
                 )}
-
-                {/* Payment Info */}
-                <View style={styles.modalSection}>
-                    <View style={styles.modalSectionHeader}>
-                        <Ionicons name="wallet-outline" size={20} color="#0097A7" />
-                        <Text style={styles.modalSectionTitle}>Informasi Pembayaran</Text>
-                    </View>
-
-                    {currentTransaksi.id_penjualan && produkData.length > 0 && (
-                        <>
-                            <View style={styles.paymentRow}>
-                                <Text style={styles.paymentLabel}>Total Produk</Text>
-                                <Text style={styles.paymentValue}>
-                                    {formatCurrency(
-                                        produkData.reduce((total, produk) => {
-                                            const qty = parseInt(produk.qty || produk.quantity || 1);
-                                            const hargaSatuan = parseInt(produk.harga || produk.harga_satuan || produk.price || 0);
-                                            return total + (qty * hargaSatuan);
-                                        }, 0)
-                                    )}
-                                </Text>
-                            </View>
-
-                            <View style={styles.modalDivider} />
-                        </>
-                    )}
-
-                    <View style={styles.paymentRow}>
-                        <Text style={styles.paymentLabel}>Biaya Antar</Text>
-                        <Text style={styles.paymentValue}>{formatCurrency(currentTransaksi.tarif)}</Text>
-                    </View>
-
-                    <View style={styles.modalDivider} />
-
-                    <View style={styles.totalRow}>
-                        <Text style={styles.totalLabel}>Total Pembayaran</Text>
-                        <Text style={styles.totalValue}>
-                            {formatCurrency(
-                                (currentTransaksi.id_penjualan && produkData.length > 0 ?
-                                    produkData.reduce((total, produk) => {
-                                        const qty = parseInt(produk.qty || produk.quantity || 1);
-                                        const hargaSatuan = parseInt(produk.harga || produk.harga_satuan || produk.price || 0);
-                                        return total + (qty * hargaSatuan);
-                                    }, 0)
-                                    : 0) + parseInt(currentTransaksi.tarif || '0')
-                            )}
-                        </Text>
-                    </View>
-                </View>
 
                 {/* Komisi Info - Show if status = FINISH */}
                 {currentTransaksi.status?.toUpperCase() === 'FINISH' && (
@@ -2087,6 +2107,9 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         textTransform: 'uppercase',
         marginTop: 2,
+    },
+    shareButton: {
+        padding: 4,
     },
 });
 

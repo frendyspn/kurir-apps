@@ -85,9 +85,6 @@ function HistoryScreen() {
             if (showLoading) {
                 setLoading(true);
             }
-
-            console.log(specificDate)
-            console.log(specificMonth)
             
             let response;
             
@@ -100,6 +97,7 @@ function HistoryScreen() {
                 const startDateToUse = specificDate || customStartDate || undefined;
                 const endDateToUse = specificMonth || customEndDate || undefined;
                 response = await apiService.getPendapatanCustom(phoneNumber, startDateToUse, endDateToUse, type);
+                console.log('Filtering with custom dates:', { startDate: customStartDate, endDate: customEndDate, type });
                 console.log('Response for custom periode:', response.data.data);
             } else {
                 // Use specific year/month if provided, otherwise use undefined for current/default
@@ -285,8 +283,8 @@ function HistoryScreen() {
         setLoading(true);
         // Reset custom dates if not custom
     if (newPeriode !== 'custom' as PeriodeType) {
-            setCustomStartDate('');
-            setCustomEndDate('');
+            // setCustomStartDate('');
+            // setCustomEndDate('');
         }
     if (userData?.no_hp && newPeriode !== 'custom' as PeriodeType) {
             await fetchPendapatan(userData.no_hp, newPeriode, type, false);

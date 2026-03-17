@@ -57,6 +57,47 @@ export default function SaldoScreen() {
         }
     }, []);
 
+    // Helper function to group transactions by source_id
+    const groupTransactionsBySourceId = useCallback((transactions: any[]) => {
+        const grouped = new Map<string, any[]>();
+        
+        transactions.forEach((transaction) => {
+            const sourceId = transaction.source_id || 'unknown';
+            if (!grouped.has(sourceId)) {
+                grouped.set(sourceId, []);
+            }
+            grouped.get(sourceId)!.push(transaction);
+        });
+
+        // Convert to array and calculate totals
+        return Array.from(grouped.entries()).map(([sourceId, items]) => {
+            const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+            // Use the first (most recent) transaction for display details
+            const firstItem = items[0];
+            
+            return {
+                source_id: sourceId,
+                id: sourceId,
+                totalAmount,
+                itemCount: items.length,
+                date: firstItem.date,
+                time: firstItem.time,
+                status: firstItem.status,
+                type: firstItem.type,
+                note: firstItem.note,
+                nama_konsumen_order: firstItem.nama_konsumen_order,
+                nama_kurir: firstItem.nama_kurir,
+                details: items, // Keep all items for reference
+            };
+        }).sort((a, b) => {
+            // Sort by date descending, then by time descending
+            if (a.date !== b.date) {
+                return b.date.localeCompare(a.date);
+            }
+            return b.time.localeCompare(a.time);
+        });
+    }, []);
+
     const fetchTransactionHistory = useCallback(async (startDate?: string, endDate?: string) => {
         try {
             setTransactionLoading(true);
@@ -81,14 +122,19 @@ export default function SaldoScreen() {
                         status: item.status || 'success',
                         type: item.type || 'unknown',
                         source_id: item.source_id || '',
+                        nama_konsumen_order: item.nama_konsumen_order || '',
+                        nama_kurir: item.nama_kurir || '',
                     }))
                     : [];
 
+                // Group transactions by source_id
+                const groupedData = groupTransactionsBySourceId(transformedData);
+
                 if (startDate && endDate) {
-                    setFilteredTransactions(transformedData);
+                    setFilteredTransactions(groupedData);
                 } else {
-                    setTransactionHistory(transformedData);
-                    setFilteredTransactions(transformedData);
+                    setTransactionHistory(groupedData);
+                    setFilteredTransactions(groupedData);
                 }
             } else {
                 Alert.alert('Error', response.message || 'Gagal memuat riwayat transaksi');
@@ -111,7 +157,7 @@ export default function SaldoScreen() {
         } finally {
             setTransactionLoading(false);
         }
-    }, []);
+    }, [groupTransactionsBySourceId]);
 
     useEffect(() => {
         fetchSaldo();
@@ -206,31 +252,25 @@ export default function SaldoScreen() {
         });
     }, []);
 
-    // Render transaction item
+    // Render transaction item (grouped by source_id)
     const renderTransactionItem = useCallback(({ item }: { item: any }) => (
         <TouchableOpacity
             style={styles.transactionItem}
             onPress={() => {
                 // If it's a pending top up transaction, navigate to confirm screen
-                if (item.type === 'topup' && item.status === 'pending' && item.bukti_topup === null) {
+                if (item.type === 'topup' && item.status === 'pending') {
                     router.push({
                         pathname: '/saldo/confirm-top-up',
                         params: {
-                            topUpId: item.id,
-                            amount: Math.abs(item.amount).toString(),
-                            bankName: item.bank_name || 'Bank',
-                            accountNumber: item.account_number || '-',
-                            accountName: item.account_name || '-',
+                            topUpId: item.details[0]?.id,
+                            amount: Math.abs(item.totalAmount).toString(),
+                            bankName: item.details[0]?.bank_name || 'Bank',
+                            accountNumber: item.details[0]?.account_number || '-',
+                            accountName: item.details[0]?.account_name || '-',
                         },
                     });
-                } else {
-                    // Otherwise, just show details or do nothing
-                    // router.push({
-                    //     pathname: '/saldo/detail',
-                    //     params: {
-                    //         transactionId: item.id,
-                    //     },
-                    // });
+                } else if (item.source_id && item.source_id !== 'unknown') {
+                    // Navigate to order detail
                     router.push({
                         pathname: '/live-order/detail',
                         params: {
@@ -245,34 +285,76 @@ export default function SaldoScreen() {
                     name="swap-horizontal" 
                     size={20} 
                     color={
-                        item.amount > 0 ? '#28a745' : '#dc3545'
+                        item.totalAmount > 0 ? '#28a745' : '#dc3545'
                     } 
                 />
             </View>
             <View style={styles.transactionDetails}>
-                <Text style={styles.transactionDate}>
-                    {new Date(item.date).toLocaleDateString('id-ID', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                    })} {item.time}
-                </Text>
-                <Text style={styles.transactionType} numberOfLines={1} ellipsizeMode="tail">
-                    {item.note.length > 50 ? `${item.note.substring(0, 50)}...` : item.note}
-                </Text>
-            </View>
-            <View style={styles.transactionRight}>
-                <Text style={[
-                    styles.transactionAmount,
-                    { color: item.amount > 0 ? '#28a745' : '#dc3545' }
-                ]}>
-                    {item.amount > 0 ? '+' : ''}Rp {Math.abs(item.amount).toLocaleString('id-ID')}
-                </Text>
-                {item.status === 'pending' ? (
-                    <Text style={styles.pendingStatus}>Pending</Text>
-                ) : item.status === 'onprocess' && (
-                    <Text style={styles.pendingStatus}>On Process</Text>
-                )}
+                {/* Header dengan tanggal dan total amount */}
+                <View style={styles.transactionDetailHeader}>
+                    <View style={styles.transactionDateContainer}>
+                        <Text style={styles.transactionDate}>
+                            {new Date(item.date).toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                            })} {item.time}
+                        </Text>
+                        {/* Nama Konsumen dan Kurir - Sejajar */}
+                        <View style={styles.personInfoContainer}>
+                            {/* Nama Konsumen */}
+                            {item.nama_konsumen_order && (
+                                <View style={styles.namaKonsumenContainer}>
+                                    <Ionicons name="person" size={14} color="#dc3545" />
+                                    <Text style={styles.namaKonsumen} numberOfLines={1} ellipsizeMode="tail">
+                                        {item.nama_konsumen_order}
+                                    </Text>
+                                </View>
+                            )}
+                            {/* Nama Kurir */}
+                            {item.nama_kurir && (
+                                <View style={styles.namaKurirContainer}>
+                                    <Ionicons name="bicycle" size={14} color="#28a745" />
+                                    <Text style={styles.namaKurir} numberOfLines={1} ellipsizeMode="tail">
+                                        {item.nama_kurir}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                    <Text style={[
+                        styles.transactionAmount,
+                        { color: item.totalAmount > 0 ? '#28a745' : '#dc3545' }
+                    ]}>
+                        {item.totalAmount > 0 ? '+' : ''}Rp {Math.abs(item.totalAmount).toLocaleString('id-ID')}
+                    </Text>
+                </View>
+
+                {/* Detail mutasi */}
+                {item.details.map((detail: any, index: number) => (
+                    <View key={detail.id} style={styles.mutasiDetailItem}>
+                        <Text style={styles.mutasiNote} numberOfLines={1} ellipsizeMode="tail">
+                            {detail.note.length > 45 ? `${detail.note.substring(0, 45)}...` : detail.note}
+                        </Text>
+                        <Text style={[
+                            styles.mutasiAmount,
+                            { color: detail.amount > 0 ? '#28a745' : '#dc3545' }
+                        ]}>
+                            {detail.amount > 0 ? '+' : ''}Rp {Math.abs(detail.amount).toLocaleString('id-ID')}
+                        </Text>
+                    </View>
+                ))}
+
+                {/* Status */}
+                <View style={styles.transactionStatusContainer}>
+                    {item.status === 'pending' ? (
+                        <Text style={styles.pendingStatus}>Pending</Text>
+                    ) : item.status === 'onprocess' ? (
+                        <Text style={styles.pendingStatus}>On Process</Text>
+                    ) : (
+                        <Text style={styles.successStatus}>Success</Text>
+                    )}
+                </View>
             </View>
         </TouchableOpacity>
     ), []);
@@ -567,11 +649,78 @@ const styles = StyleSheet.create({
     transactionDetails: {
         flex: 1,
     },
+    transactionDetailHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 12,
+    },
+    transactionDateContainer: {
+        flex: 1,
+    },
+    personInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
+        gap: 8,
+        maxWidth: '95%',
+    },
+    namaKonsumen: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#212529',
+        marginLeft: 6,
+        maxWidth: 100,
+    },
+    namaKonsumenContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    namaKurir: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#495057',
+        marginLeft: 6,
+        maxWidth: 80,
+    },
+    namaKurirContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    mutasiDetailItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+        paddingLeft: 8,
+        borderLeftWidth: 2,
+        borderLeftColor: '#e7f1ff',
+    },
+    mutasiNote: {
+        fontSize: 13,
+        fontWeight: '400',
+        color: '#6c757d',
+        flex: 1,
+        marginRight: 8,
+    },
+    mutasiAmount: {
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    transactionStatusContainer: {
+        marginTop: 10,
+    },
     transactionType: {
         fontSize: 14,
         fontWeight: '500',
         color: '#6c757d',
         marginTop: 2,
+    },
+    transactionSubtext: {
+        fontSize: 12,
+        fontWeight: '400',
+        color: '#adb5bd',
+        marginTop: 4,
     },
     transactionDate: {
         fontSize: 16,
@@ -588,6 +737,12 @@ const styles = StyleSheet.create({
     pendingStatus: {
         fontSize: 12,
         color: '#ffc107',
+        fontWeight: '500',
+        marginTop: 2,
+    },
+    successStatus: {
+        fontSize: 12,
+        color: '#28a745',
         fontWeight: '500',
         marginTop: 2,
     },

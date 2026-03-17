@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     value: {
-        fontSize: 32,
+        fontSize: 26,
         fontWeight: 'bold',
         color: '#212529',
     },

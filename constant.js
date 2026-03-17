@@ -82,4 +82,9 @@ export const API_ENDPOINTS = {
     PICKUP_ORDER: `${API_BASE_URL}/kurir/v1/live-order/pickup`,
     COMPLETE_ORDER: `${API_BASE_URL}/kurir/v1/live-order/complete`,
     SOCKET_URL: SOCKET_URL,
+    UPDATE_STATUS_ONLINE: `${API_BASE_URL}/kurir/v1/update-status-online`,
+    REKAP_ONLINE: `${API_BASE_URL}/kurir/v1/rekap-online`,
+    STATISTIK_RINGKAS: `${API_BASE_URL}/kurir/v1/statistik-ringkas`,
+    EXPORT_STATISTIK_EXCEL: `${API_BASE_URL}/kurir/v1/statistik-export-excel`,
+    EXPORT_STATISTIK_PDF: `${API_BASE_URL}/kurir/v1/statistik-export-pdf`,
 };
