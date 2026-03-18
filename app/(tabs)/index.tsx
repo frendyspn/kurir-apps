@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import * as LegacyFileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, BackHandler, Clipboard, Image, Linking, Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, BackHandler, Clipboard, Image, Linking, Share as NativeShare, PermissionsAndroid, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Badge from '../../components/badge';
 import JenisOrderChart from '../../components/charts/jenis-order-chart';
@@ -59,6 +59,7 @@ function HomeScreen() {
     const [showShareModal, setShowShareModal] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
+    const [isCopyingDailyRecap, setIsCopyingDailyRecap] = useState(false);
 
     const getStartOfMonth = () => {
         const now = new Date();
@@ -793,6 +794,31 @@ function HomeScreen() {
         return `${day}/${month}/${year}`;
     }, []);
 
+    const formatDateTimeForText = useCallback((value?: string | null) => {
+        if (!value) {
+            return '';
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
+    }, []);
+
+    const toArrayData = useCallback((res: any) => {
+        if (Array.isArray(res?.data?.data)) return res.data.data;
+        if (Array.isArray(res?.data)) return res.data;
+        if (Array.isArray(res)) return res;
+        return [];
+    }, []);
+
     const isDateRangeValid = useCallback((startDate: Date, endDate: Date) => {
         if (startDate > endDate) {
             Alert.alert('Rentang tanggal tidak valid', 'Tanggal mulai harus lebih kecil atau sama dengan tanggal akhir.');
@@ -800,6 +826,38 @@ function HomeScreen() {
         }
 
         return true;
+    }, []);
+
+    const ensureSharePermission = useCallback(async () => {
+        if (Platform.OS !== 'android') {
+            return true;
+        }
+
+        const sdkVersion = typeof Platform.Version === 'number'
+            ? Platform.Version
+            : Number(Platform.Version || 0);
+
+        // Android 13+ uses scoped storage, and sharing from app cache does not require legacy storage permission.
+        if (sdkVersion >= 33) {
+            return true;
+        }
+
+        const writePermission = PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE;
+        const hasPermission = await PermissionsAndroid.check(writePermission);
+
+        if (hasPermission) {
+            return true;
+        }
+
+        const granted = await PermissionsAndroid.request(writePermission, {
+            title: 'Izin Penyimpanan',
+            message: 'Aplikasi membutuhkan izin penyimpanan untuk menyiapkan file PDF sebelum dibagikan.',
+            buttonPositive: 'Izinkan',
+            buttonNegative: 'Tolak',
+            buttonNeutral: 'Nanti',
+        });
+
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
     }, []);
 
     const openExportUrl = useCallback(async (response: any, format: 'excel' | 'pdf') => {
@@ -875,11 +933,13 @@ function HomeScreen() {
         setIsExporting(true);
 
         try {
+            const courierName = userData?.name || userData?.nama_lengkap || userData?.nama_sopir || userData?.nm_sopir;
             const res = await apiService.exportStatistikPdf(
                 userData.no_hp,
                 selectedFilter,
                 formatDateForApi(exportStartDate),
-                formatDateForApi(exportEndDate)
+                formatDateForApi(exportEndDate),
+                courierName
             );
             if (!res?.success) {
                 Alert.alert('Export gagal', res?.message || 'Endpoint export PDF belum tersedia.');
@@ -893,7 +953,7 @@ function HomeScreen() {
         } finally {
             setIsExporting(false);
         }
-    }, [exportEndDate, exportStartDate, formatDateForApi, isDateRangeValid, openExportUrl, selectedFilter, userData?.no_hp]);
+    }, [exportEndDate, exportStartDate, formatDateForApi, isDateRangeValid, openExportUrl, selectedFilter, userData?.name, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
 
     const handleShareTextCopy = useCallback(async () => {
         if (!userData?.no_hp) {
@@ -907,9 +967,11 @@ function HomeScreen() {
 
         setIsSharing(true);
         try {
+            console.log(userData?.nama_lengkap)
             const startDate = formatDateForApi(shareStartDate);
             const endDate = formatDateForApi(shareEndDate);
-            const res = await apiService.exportStatistikPdf(userData.no_hp, selectedFilter, startDate, endDate);
+            const courierName = userData?.name || userData?.nama_lengkap || userData?.nama_sopir || userData?.nm_sopir;
+            const res = await apiService.exportStatistikPdf(userData.no_hp, selectedFilter, startDate, endDate, courierName);
 
             if (!res?.success) {
                 Alert.alert('Share gagal', res?.message || 'Gagal mengambil data statistik untuk text share.');
@@ -953,8 +1015,18 @@ function HomeScreen() {
                 onlineMinutes = getOnlineMinutesFromPayload(fallbackRes) || getOnlineMinutesFromPayload(fallbackRes?.data) || 0;
             }
 
+            const kurirName =
+                userData?.name ||
+                userData?.nama ||
+                userData?.nama_sopir ||
+                userData?.nm_sopir ||
+                '-';
+            const kurirPhone = userData?.no_hp || '-';
+
             const message = [
                 'Laporan Statistik Kurir',
+                `Nama Kurir: ${kurirName}`,
+                `No HP Kurir: ${kurirPhone}`,
                 `Periode: ${formatDateForText(shareStartDate)} - ${formatDateForText(shareEndDate)}`,
                 `Filter: ${selectedFilter}`,
                 '',
@@ -974,7 +1046,7 @@ function HomeScreen() {
         } finally {
             setIsSharing(false);
         }
-    }, [formatCurrency, formatDateForApi, formatDateForText, formatOnlineDuration, getKomisiFromPayload, getOnlineMinutesFromPayload, getOrderCountFromPayload, getPelangganBaruFromPayload, getPendapatanBersihFromPayload, getPendapatanFromPayload, isDateRangeValid, selectedFilter, shareEndDate, shareStartDate, toNumber, userData?.no_hp]);
+    }, [formatCurrency, formatDateForApi, formatDateForText, formatOnlineDuration, getKomisiFromPayload, getOnlineMinutesFromPayload, getOrderCountFromPayload, getPelangganBaruFromPayload, getPendapatanBersihFromPayload, getPendapatanFromPayload, isDateRangeValid, selectedFilter, shareEndDate, shareStartDate, toNumber, userData?.name, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
 
     const handleSharePdf = useCallback(async () => {
         if (!userData?.no_hp) {
@@ -988,11 +1060,19 @@ function HomeScreen() {
 
         setIsSharing(true);
         try {
+            const hasSharePermission = await ensureSharePermission();
+            if (!hasSharePermission) {
+                Alert.alert('Izin diperlukan', 'Izin penyimpanan belum diberikan.');
+                return;
+            }
+
+            const courierName = userData?.name || userData?.nama || userData?.nama_sopir || userData?.nm_sopir;
             const res = await apiService.exportStatistikPdf(
                 userData.no_hp,
                 selectedFilter,
                 formatDateForApi(shareStartDate),
-                formatDateForApi(shareEndDate)
+                formatDateForApi(shareEndDate),
+                courierName
             );
 
             if (!res?.success) {
@@ -1011,32 +1091,24 @@ function HomeScreen() {
 
             await LegacyFileSystem.downloadAsync(fileUrl, localFileUri);
 
-            const shareUri = Platform.OS === 'android'
-                ? await LegacyFileSystem.getContentUriAsync(localFileUri)
-                : localFileUri;
-
             try {
-                const Sharing = await import('expo-sharing');
-                const canShareFile = await Sharing.isAvailableAsync();
-
-                if (canShareFile) {
-                    await Sharing.shareAsync(shareUri, {
-                        mimeType: 'application/pdf',
-                        dialogTitle: 'Share Laporan Statistik Kurir',
-                        UTI: 'com.adobe.pdf',
-                    });
-                } else {
-                    throw new Error('FILE_SHARE_NOT_AVAILABLE');
-                }
+                const ShareFile = require('react-native-share').default;
+                await ShareFile.open({
+                    title: 'Share Laporan Statistik Kurir',
+                    url: localFileUri,
+                    type: 'application/pdf',
+                    filename: remoteFileName,
+                    failOnCancel: false,
+                });
             } catch (_) {
-                await Share.share({
+                await NativeShare.share({
                     title: 'Laporan Statistik Kurir',
                     message: `Laporan Statistik Kurir\nPeriode: ${formatDateForText(shareStartDate)} - ${formatDateForText(shareEndDate)}\n${fileUrl}`,
                 });
 
                 Alert.alert(
                     'Info Share',
-                    'Perangkat belum mendukung share file langsung pada build ini, jadi dikirim sebagai text + link. Jika ingin file langsung, rebuild aplikasi setelah install expo-sharing.'
+                    'Share file PDF langsung gagal dijalankan. Aplikasi mengirim text + link sebagai fallback.'
                 );
             }
 
@@ -1046,7 +1118,183 @@ function HomeScreen() {
         } finally {
             setIsSharing(false);
         }
-    }, [formatDateForApi, formatDateForText, isDateRangeValid, selectedFilter, shareEndDate, shareStartDate, userData?.no_hp]);
+    }, [ensureSharePermission, formatDateForApi, formatDateForText, isDateRangeValid, selectedFilter, shareEndDate, shareStartDate, userData?.no_hp]);
+
+    const handleCopyDailyRecap = useCallback(async () => {
+        if (!userData?.no_hp) {
+            Alert.alert('Gagal', 'Data pengguna belum siap.');
+            return;
+        }
+
+        setIsCopyingDailyRecap(true);
+        try {
+            const kurirName =
+                userData?.name ||
+                userData?.nama_lengkap ||
+                userData?.nama ||
+                userData?.nama_sopir ||
+                userData?.nm_sopir ||
+                '-';
+            const kurirPhone = userData?.no_hp || '-';
+
+            const rekapRes = await apiService.getRekapOnline(userData.no_hp);
+            const rekapData = rekapRes?.data || {};
+            const rekapDetail = Array.isArray(rekapData?.detail) ? rekapData.detail : [];
+            const firstOnline = rekapDetail.length > 0 ? (rekapDetail[0]?.online_at || '') : '';
+            const offlineEntries = rekapDetail.filter((item: any) => !!item?.offline_at);
+            const lastOfflineRaw = offlineEntries.length > 0 ? offlineEntries[offlineEntries.length - 1]?.offline_at : '';
+            const isOnlineNow = Boolean(rekapData?.is_online_now);
+            const waktuOn = formatDateTimeForText(firstOnline);
+            const waktuOff = isOnlineNow ? '' : formatDateTimeForText(lastOfflineRaw);
+            const totalOnlineMinutes = Number(rekapData?.total_minutes || 0);
+            const totalDurasiOn = formatOnlineDuration(totalOnlineMinutes);
+
+            const todayDate = formatDateForApi(new Date());
+            const [liveOrderRes, manualOrderRes, agentRes] = await Promise.all([
+                apiService.getListLiveOrder(userData.no_hp, todayDate, todayDate),
+                apiService.getListTransaksiManual(userData.no_hp, todayDate, todayDate),
+                apiService.getListAgent(userData.no_hp),
+            ]);
+
+            const liveOrdersRaw = toArrayData(liveOrderRes);
+            const manualOrdersRaw = toArrayData(manualOrderRes);
+            const agentListRaw = toArrayData(agentRes);
+
+            const agentNameMap = new Map<string, string>();
+            for (const agent of agentListRaw) {
+                const id = String(agent?.id_konsumen ?? '').trim();
+                if (!id) continue;
+                const name =
+                    String(agent?.nama_lengkap ?? '').trim() ||
+                    String(agent?.nama ?? '').trim() ||
+                    String(agent?.name ?? '').trim();
+                if (name) {
+                    agentNameMap.set(id, name);
+                }
+            }
+
+            const liveOrders = liveOrdersRaw.filter((item: any) => {
+                const source = String(item?.source ?? '').toUpperCase();
+                return source === '' || source === 'LIVE_ORDER';
+            });
+
+            const manualOrders = manualOrdersRaw.filter((item: any) => {
+                const source = String(item?.source ?? '').toUpperCase();
+                return source === '' || source === 'MANUAL_KURIR';
+            });
+
+            const getAgentKey = (item: any) => {
+                const raw =
+                    item?.id_agen ??
+                    item?.agen_kurir ??
+                    item?.id_konsumen_agen ??
+                    item?.id_konsumen_referral ??
+                    item?.id_konsumen ??
+                    '';
+                return String(raw).trim();
+            };
+
+            const getCustomerName = (item: any) => {
+                const name =
+                    item?.nama_pelanggan ||
+                    item?.nama_customer ||
+                    item?.nama_pemesan ||
+                    item?.penerima_barang ||
+                    item?.pemberi_barang ||
+                    item?.nama_lengkap ||
+                    '-';
+                return String(name).trim() || '-';
+            };
+
+            const getDestination = (item: any) => {
+                const dest = item?.alamat_antar || item?.alamat_tujuan || item?.tujuan || '-';
+                return String(dest).trim() || '-';
+            };
+
+            const getOrderValue = (item: any) => Number(item?.tarif ?? item?.total ?? item?.nominal ?? 0) || 0;
+
+            const agentGrouped = new Map<string, any[]>();
+            for (const item of liveOrders) {
+                const key = getAgentKey(item) || 'unknown';
+                const current = agentGrouped.get(key) || [];
+                current.push(item);
+                agentGrouped.set(key, current);
+            }
+
+            const agenLines: string[] = [];
+            if (agentGrouped.size === 0) {
+                agenLines.push('Tidak ada data pesanan dari agen lain.');
+            } else {
+                let agenIndex = 0;
+                for (const [agentKey, items] of agentGrouped.entries()) {
+                    agenIndex += 1;
+                    const agentName =
+                        agentNameMap.get(agentKey) ||
+                        String(items?.[0]?.nama_agen ?? '').trim() ||
+                        String(items?.[0]?.nama_lengkap_agen ?? '').trim() ||
+                        (agentKey === 'unknown' ? `Agen ${agenIndex}` : `Agen ${agentKey}`);
+
+                    agenLines.push(`Nama Agen: ${agentName}`);
+                    agenLines.push(`Jumlah: ${items.length}`);
+                    items.forEach((item, index) => {
+                        agenLines.push(
+                            `${index + 1}. ${getCustomerName(item)} : ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
+                        );
+                    });
+                    agenLines.push('');
+                }
+                if (agenLines[agenLines.length - 1] === '') {
+                    agenLines.pop();
+                }
+            }
+
+            const pelangganLines: string[] = [];
+            pelangganLines.push(`Jumlah: ${manualOrders.length}`);
+            pelangganLines.push('');
+            if (manualOrders.length === 0) {
+                pelangganLines.push('Tidak ada data pesanan pelanggan sendiri.');
+            } else {
+                manualOrders.forEach((item: any, index: number) => {
+                    pelangganLines.push(
+                        `${index + 1}. ${getCustomerName(item)} : ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
+                    );
+                });
+            }
+
+            const message = [
+                `Nama: ${kurirName}`,
+                `No HP: ${kurirPhone}`,
+                `Tanggal: ${formatDateForText(new Date())}`,
+                `Waktu On: ${waktuOn}`,
+                `Waktu Off: ${waktuOff}`,
+                `Total Durasi ON: ${totalDurasiOn}`,
+                '',
+                '----------------------------------',
+                '',
+                `Jumlah Pesanan Hari Ini: ${statsSummary.pesananToday}`,
+                `Total Omset Hari Ini: ${formatCurrency(statsSummary.omsetToday)}`,
+                `Pendapatan Hari Ini: ${formatCurrency(statsSummary.pendapatanToday)}`,
+                `Komisi Hari Ini: ${formatCurrency(statsSummary.komisiToday)}`,
+                '',
+                '--------------------------------',
+                '',
+                '*Data Pesanan dari Agen lain:*',
+                '',
+                ...agenLines,
+                '',
+                '*Data Pesanan Pelanggan sendiri*',
+                '',
+                ...pelangganLines,
+            ].join('\n');
+
+            Clipboard.setString(message);
+            Alert.alert('Berhasil', 'Rekap harian berhasil disalin ke clipboard.');
+        } catch (error) {
+            Alert.alert('Gagal', 'Terjadi kesalahan saat menyalin rekap harian.');
+        } finally {
+            setIsCopyingDailyRecap(false);
+        }
+    }, [formatCurrency, formatDateForApi, formatDateForText, formatDateTimeForText, formatOnlineDuration, statsSummary.komisiToday, statsSummary.omsetToday, statsSummary.pendapatanToday, statsSummary.pesananToday, toArrayData, userData?.name, userData?.nama_lengkap, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
 
     // Menu items data
     const menuItems: any[] = [
@@ -1405,6 +1653,15 @@ function HomeScreen() {
                             <Text style={styles.statsExportBtnText}>Share</Text>
                         </TouchableOpacity>
                     </View>
+
+                    <TouchableOpacity
+                        style={[styles.statsExportBtn, styles.statsExportBtnFullWidth]}
+                        onPress={handleCopyDailyRecap}
+                        disabled={isCopyingDailyRecap}
+                    >
+                        <Ionicons name="copy-outline" size={14} color="#1d4f7a" />
+                        <Text style={styles.statsExportBtnText}>{isCopyingDailyRecap ? 'Proses...' : 'Copy Rekap Harian'}</Text>
+                    </TouchableOpacity>
 
                     <View style={styles.sectionDivider} />
                 </View>
@@ -1936,6 +2193,10 @@ const styles = StyleSheet.create({
         borderColor: '#d7ecff',
         backgroundColor: '#f6fbff',
         paddingVertical: 7,
+    },
+    statsExportBtnFullWidth: {
+        width: '100%',
+        marginTop: 8,
     },
     statsExportBtnText: {
         fontSize: 11,

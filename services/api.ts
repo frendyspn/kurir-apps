@@ -347,7 +347,7 @@ class ApiService {
         });
     }
 
-    async exportStatistikPdf(no_hp: string, type?: string, startDate?: string, endDate?: string): Promise<ApiResponse> {
+    async exportStatistikPdf(no_hp: string, type?: string, startDate?: string, endDate?: string, courierName?: string): Promise<ApiResponse> {
         const formData = new FormData();
         formData.append('no_hp', no_hp);
         if (type) {
@@ -358,6 +358,9 @@ class ApiService {
         }
         if (endDate) {
             formData.append('end_date', endDate);
+        }
+        if (courierName) {
+            formData.append('nama_kurir', courierName);
         }
 
         return this.request(API_ENDPOINTS.EXPORT_STATISTIK_PDF, {
