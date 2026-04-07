@@ -15,22 +15,22 @@ echo "📝 Creating EAS secrets..."
 
 # Create secrets
 echo "Creating GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER..."
-eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value "$PROJECT_NUMBER"
+eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value "$PROJECT_NUMBER"
 
 echo "Creating GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID..."
-eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value "$PROJECT_ID"
+eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value "$PROJECT_ID"
 
 echo "Creating GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID..."
-eas secret:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value "$MOBILE_SDK_APP_ID"
+eas env:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value "$MOBILE_SDK_APP_ID"
 
 echo "Creating GOOGLE_SERVICES_API_KEY_CURRENT_KEY..."
-eas secret:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value "$API_KEY"
+eas env:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value "$API_KEY"
 
 echo ""
 echo "✅ EAS secrets created successfully!"
 echo ""
 echo "🔍 Verify secrets were created:"
-echo "   eas secret:list"
+echo "   eas env:list"
 echo ""
 echo "🚀 Test the build:"
 echo "   eas build --profile preview --platform android"

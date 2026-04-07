@@ -16,23 +16,23 @@ If you prefer to set up secrets manually, run these commands:
 
 ### Project Info
 ```bash
-eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value '642680161917'
-eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value 'satukurirwebpush'
+eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value '642680161917'
+eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value 'satukurirwebpush'
 ```
 
 ### Client Info
 ```bash
-eas secret:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value '1:642680161917:android:582c8b31edf7157ece9314'
+eas env:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value '1:642680161917:android:582c8b31edf7157ece9314'
 ```
 
 ### API Key
 ```bash
-eas secret:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value 'AIzaSyB-qw55eFd76kkKxsVXKSTBzf-8aTZGzo8'
+eas env:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value 'AIzaSyB-qw55eFd76kkKxsVXKSTBzf-8aTZGzo8'
 ```
 
 ## Verify Setup
 ```bash
-eas secret:list
+eas env:list
 ```
 
 ## Test Build
@@ -69,7 +69,7 @@ If build still fails:
 
 1. Check that all secrets are created:
    ```bash
-   eas secret:list
+   eas env:list
    ```
 
 2. Verify secret names match exactly (case-sensitive)

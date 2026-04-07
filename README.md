@@ -52,13 +52,13 @@ This project uses Firebase for push notifications. To set up Firebase configurat
    - Go to Project Settings > General > Your apps
    - Find your Android app and note down the values
 
-2. **Set up EAS secrets:**
+1. **Set up EAS secrets:**
    ```bash
    # Set the required environment variables for Firebase
-   eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value 'your_project_number'
-   eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value 'your_project_id'
-   eas secret:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value 'your_mobile_sdk_app_id'
-   eas secret:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value 'your_api_key'
+   eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value 'your_project_number'
+   eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value 'your_project_id'
+   eas env:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value 'your_mobile_sdk_app_id'
+   eas env:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value 'your_api_key'
    ```
 
 3. **Build the app:**

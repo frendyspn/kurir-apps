@@ -36,12 +36,12 @@ if [ ${#MISSING_VARS[@]} -ne 0 ]; then
   done
   echo ""
   echo "📝 To set up EAS secrets, run these commands:"
-  echo "   eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value 'your_project_number'"
-  echo "   eas secret:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value 'your_project_id'"
-  echo "   eas secret:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value 'your_mobile_sdk_app_id'"
-  echo "   eas secret:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value 'your_api_key'"
+  echo "   eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_NUMBER --value 'your_project_number'"
+  echo "   eas env:create --name GOOGLE_SERVICES_PROJECT_INFO_PROJECT_ID --value 'your_project_id'"
+  echo "   eas env:create --name GOOGLE_SERVICES_CLIENT_INFO_MOBILE_SDK_APP_ID --value 'your_mobile_sdk_app_id'"
+  echo "   eas env:create --name GOOGLE_SERVICES_API_KEY_CURRENT_KEY --value 'your_api_key'"
   echo ""
-  echo "🔍 Or check existing secrets with: eas secret:list"
+  echo "🔍 Or check existing secrets with: eas env:list"
   exit 1
 fi
 
