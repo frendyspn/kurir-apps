@@ -189,9 +189,11 @@ export default function LoginOtpScreen() {
                                     </TouchableOpacity>
                                 )}
                                 {otpDev ? (
-                                    <Text style={styles.devText}>Dev: {otpDev}</Text>
+                                    <></>
+                                    // <Text style={styles.devText}>Dev: {otpDev}</Text>
                                 ) : params.otp ? (
-                                    <Text style={styles.devText}>Dev: {params.otp}</Text>
+                                    <></>
+                                    // <Text style={styles.devText}>Dev: {params.otp}</Text>
                                 ) : null}
                             </View>
 

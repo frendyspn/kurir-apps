@@ -237,7 +237,7 @@ console.log('Fetching transaction detail for ID:', id);
                     <Ionicons name="arrow-back" size={24} color="#ffffff" />
                 </TouchableOpacity>
 
-                <Text style={styles.headerTitle}>Detail Order</Text>
+                <Text style={styles.headerTitle}>Detail Order </Text>
 
                 <TouchableOpacity
                     style={styles.shareButton}

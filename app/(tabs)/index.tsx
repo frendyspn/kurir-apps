@@ -57,9 +57,11 @@ function HomeScreen() {
     });
     const [showExportModal, setShowExportModal] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
+    const [showCopyModal, setShowCopyModal] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
     const [isCopyingDailyRecap, setIsCopyingDailyRecap] = useState(false);
+    const [copyDate, setCopyDate] = useState<Date>(new Date());
 
     const getStartOfMonth = () => {
         const now = new Date();
@@ -1173,6 +1175,187 @@ function HomeScreen() {
                 }
             }
 
+            // Fungsi helper untuk mendapatkan agent ID dari order
+            const getAgentId = (item: any) => {
+                return String(item?.id_agen ?? item?.id_agent ?? '').trim();
+            };
+
+            // Fungsi helper untuk mengecek apakah order dari agent lain
+            const isOrderFromAgent = (item: any): boolean => {
+                const agentId = getAgentId(item);
+                const currentUserId = userData?.id_konsumen ? String(userData.id_konsumen).trim() : '';
+                // Jika id_agent ada dan berbeda dari id_konsumen user saat ini, maka dari agent lain
+                return agentId !== '' && agentId !== currentUserId;
+            };
+
+            const getCustomerName = (item: any) => {
+                const name =
+                    item?.nama_pelanggan ||
+                    item?.nama_customer ||
+                    item?.nama_pemesan ||
+                    item?.penerima_barang ||
+                    item?.pemberi_barang ||
+                    item?.nama_lengkap ||
+                    '-';
+                return String(name).trim() || '-';
+            };
+
+            const getPickupLocation = (item: any) => {
+                const pickup = item?.alamat_jemput || item?.alamat_asal || item?.asal || '-';
+                return String(pickup).trim() || '-';
+            };
+
+            const getDestination = (item: any) => {
+                const dest = item?.alamat_antar || item?.alamat_tujuan || item?.tujuan || '-';
+                return String(dest).trim() || '-';
+            };
+
+            const getOrderValue = (item: any) => Number(item?.tarif ?? item?.total ?? item?.nominal ?? 0) || 0;
+
+            // Gabungkan semua orders (live + manual)
+            const allOrders = [...liveOrdersRaw, ...manualOrdersRaw];
+
+            // Pisahkan order dari agent lain dan order sendiri
+            const ordersFromAgent = allOrders.filter(isOrderFromAgent);
+            const ordersFromSelf = allOrders.filter(item => !isOrderFromAgent(item));
+
+            // Grouping orders dari agent lain berdasarkan id_agen
+            const agentGrouped = new Map<string, any[]>();
+            for (const item of ordersFromAgent) {
+                const key = getAgentId(item) || 'unknown';
+                const current = agentGrouped.get(key) || [];
+                current.push(item);
+                agentGrouped.set(key, current);
+            }
+
+            const agenLines: string[] = [];
+            if (agentGrouped.size === 0) {
+                agenLines.push('Tidak ada data pesanan dari agen lain.');
+            } else {
+                let agenIndex = 0;
+                for (const [agentKey, items] of agentGrouped.entries()) {
+                    agenIndex += 1;
+                    const agentName =
+                        agentNameMap.get(agentKey) ||
+                        String(items?.[0]?.nama_agen ?? '').trim() ||
+                        String(items?.[0]?.nama_lengkap_agen ?? '').trim() ||
+                        (agentKey === 'unknown' ? `Agen ${agenIndex}` : `Agen ${agentKey}`);
+
+                    agenLines.push(`Nama Agen: **${agentName}**`);
+                    agenLines.push(`Jumlah: ${items.length}`);
+                    items.forEach((item, index) => {
+                        agenLines.push(
+                            `${index + 1}. **${getCustomerName(item)}** : ${getPickupLocation(item)} : ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
+                        );
+                    });
+                    agenLines.push('');
+                }
+                if (agenLines[agenLines.length - 1] === '') {
+                    agenLines.pop();
+                }
+            }
+
+            const pelangganLines: string[] = [];
+            pelangganLines.push(`Jumlah: ${ordersFromSelf.length}`);
+            pelangganLines.push('');
+            if (ordersFromSelf.length === 0) {
+                pelangganLines.push('Tidak ada data pesanan pelanggan sendiri.');
+            } else {
+                ordersFromSelf.forEach((item: any, index: number) => {
+                    pelangganLines.push(
+                        `${index + 1}. **${getCustomerName(item)}** : ${getPickupLocation(item)} : ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
+                    );
+                });
+            }
+
+            const message = [
+                `Nama: ${kurirName}`,
+                `No HP: ${kurirPhone}`,
+                `Tanggal: ${formatDateForText(new Date())}`,
+                `Waktu On: ${waktuOn}`,
+                `Waktu Off: ${waktuOff}`,
+                `Total Durasi ON: ${totalDurasiOn}`,
+                '',
+                '----------------------------------',
+                '',
+                `Jumlah Pesanan Hari Ini: ${ordersFromAgent.length + ordersFromSelf.length}`,
+                `Total Omset Hari Ini: ${formatCurrency(allOrders.reduce((sum, item) => sum + getOrderValue(item), 0))}`,
+                `Pendapatan Hari Ini: ${formatCurrency(statsSummary.pendapatanToday)}`,
+                `Komisi Hari Ini: ${formatCurrency(statsSummary.komisiToday)}`,
+                '',
+                '--------------------------------',
+                '',
+                '*Data Pesanan dari Agen lain:*',
+                '',
+                ...agenLines,
+                '',
+                '*Data Pesanan Pelanggan sendiri*',
+                '',
+                ...pelangganLines,
+            ].join('\n');
+
+            Clipboard.setString(message);
+            Alert.alert('Berhasil', 'Rekap harian berhasil disalin ke clipboard.');
+        } catch (error) {
+            Alert.alert('Gagal', 'Terjadi kesalahan saat menyalin rekap harian.');
+        } finally {
+            setIsCopyingDailyRecap(false);
+        }
+    }, [formatCurrency, formatDateForApi, formatDateForText, formatDateTimeForText, formatOnlineDuration, statsSummary.komisiToday, statsSummary.omsetToday, statsSummary.pendapatanToday, statsSummary.pesananToday, toArrayData, userData?.name, userData?.nama_lengkap, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
+
+    const handleCopyDailyRecapWithDate = useCallback(async (selectedDate: Date) => {
+        if (!userData?.no_hp) {
+            Alert.alert('Gagal', 'Data pengguna belum siap.');
+            return;
+        }
+
+        setIsCopyingDailyRecap(true);
+        try {
+            const kurirName =
+                userData?.name ||
+                userData?.nama_lengkap ||
+                userData?.nama ||
+                userData?.nama_sopir ||
+                userData?.nm_sopir ||
+                '-';
+            const kurirPhone = userData?.no_hp || '-';
+
+            const rekapRes = await apiService.getRekapOnline(userData.no_hp);
+            const rekapData = rekapRes?.data || {};
+            const rekapDetail = Array.isArray(rekapData?.detail) ? rekapData.detail : [];
+            const firstOnline = rekapDetail.length > 0 ? (rekapDetail[0]?.online_at || '') : '';
+            const offlineEntries = rekapDetail.filter((item: any) => !!item?.offline_at);
+            const lastOfflineRaw = offlineEntries.length > 0 ? offlineEntries[offlineEntries.length - 1]?.offline_at : '';
+            const isOnlineNow = Boolean(rekapData?.is_online_now);
+            const waktuOn = formatDateTimeForText(firstOnline);
+            const waktuOff = isOnlineNow ? '' : formatDateTimeForText(lastOfflineRaw);
+            const totalOnlineMinutes = Number(rekapData?.total_minutes || 0);
+            const totalDurasiOn = formatOnlineDuration(totalOnlineMinutes);
+
+            const selectedDateFormatted = formatDateForApi(selectedDate);
+            const [liveOrderRes, manualOrderRes, agentRes] = await Promise.all([
+                apiService.getListLiveOrder(userData.no_hp, selectedDateFormatted, selectedDateFormatted),
+                apiService.getListTransaksiManual(userData.no_hp, selectedDateFormatted, selectedDateFormatted),
+                apiService.getListAgent(userData.no_hp),
+            ]);
+
+            const liveOrdersRaw = toArrayData(liveOrderRes);
+            const manualOrdersRaw = toArrayData(manualOrderRes);
+            const agentListRaw = toArrayData(agentRes);
+
+            const agentNameMap = new Map<string, string>();
+            for (const agent of agentListRaw) {
+                const id = String(agent?.id_konsumen ?? '').trim();
+                if (!id) continue;
+                const name =
+                    String(agent?.nama_lengkap ?? '').trim() ||
+                    String(agent?.nama ?? '').trim() ||
+                    String(agent?.name ?? '').trim();
+                if (name) {
+                    agentNameMap.set(id, name);
+                }
+            }
+
             const liveOrders = liveOrdersRaw.filter((item: any) => {
                 const source = String(item?.source ?? '').toUpperCase();
                 return source === '' || source === 'LIVE_ORDER';
@@ -1206,6 +1389,11 @@ function HomeScreen() {
                 return String(name).trim() || '-';
             };
 
+            const getPickupLocation = (item: any) => {
+                const pickup = item?.alamat_jemput || item?.alamat_asal || item?.asal || '-';
+                return String(pickup).trim() || '-';
+            };
+
             const getDestination = (item: any) => {
                 const dest = item?.alamat_antar || item?.alamat_tujuan || item?.tujuan || '-';
                 return String(dest).trim() || '-';
@@ -1213,9 +1401,26 @@ function HomeScreen() {
 
             const getOrderValue = (item: any) => Number(item?.tarif ?? item?.total ?? item?.nominal ?? 0) || 0;
 
+            // Gabungkan semua orders (live + manual)
+            const allOrders = [...liveOrdersRaw, ...manualOrdersRaw];
+
+            // Pisahkan order dari agent lain dan order sendiri
+            const ordersFromAgent = allOrders.filter((item: any) => {
+                const agentId = String(item?.id_agen ?? item?.id_agent ?? '').trim();
+                const currentUserId = userData?.id_konsumen ? String(userData.id_konsumen).trim() : '';
+                return agentId !== '' && agentId !== currentUserId;
+            });
+
+            const ordersFromSelf = allOrders.filter((item: any) => {
+                const agentId = String(item?.id_agen ?? item?.id_agent ?? '').trim();
+                const currentUserId = userData?.id_konsumen ? String(userData.id_konsumen).trim() : '';
+                return agentId === '' || agentId === currentUserId;
+            });
+
+            // Grouping orders dari agent lain berdasarkan id_agen
             const agentGrouped = new Map<string, any[]>();
-            for (const item of liveOrders) {
-                const key = getAgentKey(item) || 'unknown';
+            for (const item of ordersFromAgent) {
+                const key = String(item?.id_agen ?? item?.id_agent ?? '').trim() || 'unknown';
                 const current = agentGrouped.get(key) || [];
                 current.push(item);
                 agentGrouped.set(key, current);
@@ -1234,11 +1439,11 @@ function HomeScreen() {
                         String(items?.[0]?.nama_lengkap_agen ?? '').trim() ||
                         (agentKey === 'unknown' ? `Agen ${agenIndex}` : `Agen ${agentKey}`);
 
-                    agenLines.push(`Nama Agen: ${agentName}`);
+                    agenLines.push(`Nama Agen: *${agentName}*`);
                     agenLines.push(`Jumlah: ${items.length}`);
                     items.forEach((item, index) => {
                         agenLines.push(
-                            `${index + 1}. ${getCustomerName(item)} : ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
+                            `${index + 1}. *${getCustomerName(item)}* : ${getPickupLocation(item)} > ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
                         );
                     });
                     agenLines.push('');
@@ -1249,14 +1454,14 @@ function HomeScreen() {
             }
 
             const pelangganLines: string[] = [];
-            pelangganLines.push(`Jumlah: ${manualOrders.length}`);
+            pelangganLines.push(`Jumlah: ${ordersFromSelf.length}`);
             pelangganLines.push('');
-            if (manualOrders.length === 0) {
+            if (ordersFromSelf.length === 0) {
                 pelangganLines.push('Tidak ada data pesanan pelanggan sendiri.');
             } else {
-                manualOrders.forEach((item: any, index: number) => {
+                ordersFromSelf.forEach((item: any, index: number) => {
                     pelangganLines.push(
-                        `${index + 1}. ${getCustomerName(item)} : ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
+                        `${index + 1}. *${getCustomerName(item)}* : ${getPickupLocation(item)} > ${getDestination(item)} : ${formatCurrency(getOrderValue(item))}`
                     );
                 });
             }
@@ -1264,37 +1469,36 @@ function HomeScreen() {
             const message = [
                 `Nama: ${kurirName}`,
                 `No HP: ${kurirPhone}`,
-                `Tanggal: ${formatDateForText(new Date())}`,
+                `Tanggal: ${formatDateForText(selectedDate)}`,
                 `Waktu On: ${waktuOn}`,
                 `Waktu Off: ${waktuOff}`,
                 `Total Durasi ON: ${totalDurasiOn}`,
                 '',
                 '----------------------------------',
                 '',
-                `Jumlah Pesanan Hari Ini: ${statsSummary.pesananToday}`,
-                `Total Omset Hari Ini: ${formatCurrency(statsSummary.omsetToday)}`,
-                `Pendapatan Hari Ini: ${formatCurrency(statsSummary.pendapatanToday)}`,
-                `Komisi Hari Ini: ${formatCurrency(statsSummary.komisiToday)}`,
+                `Jumlah Pesanan: ${ordersFromAgent.length + ordersFromSelf.length}`,
+                `Total Pemasukan: ${formatCurrency(allOrders.reduce((sum, item) => sum + getOrderValue(item), 0))}`,
                 '',
                 '--------------------------------',
-                '',
-                '*Data Pesanan dari Agen lain:*',
-                '',
-                ...agenLines,
                 '',
                 '*Data Pesanan Pelanggan sendiri*',
                 '',
                 ...pelangganLines,
+                '',
+                '*Data Pesanan dari Agen lain:*',
+                '',
+                ...agenLines,
             ].join('\n');
 
             Clipboard.setString(message);
             Alert.alert('Berhasil', 'Rekap harian berhasil disalin ke clipboard.');
+            setShowCopyModal(false);
         } catch (error) {
             Alert.alert('Gagal', 'Terjadi kesalahan saat menyalin rekap harian.');
         } finally {
             setIsCopyingDailyRecap(false);
         }
-    }, [formatCurrency, formatDateForApi, formatDateForText, formatDateTimeForText, formatOnlineDuration, statsSummary.komisiToday, statsSummary.omsetToday, statsSummary.pendapatanToday, statsSummary.pesananToday, toArrayData, userData?.name, userData?.nama_lengkap, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
+    }, [formatCurrency, formatDateForApi, formatDateForText, formatDateTimeForText, formatOnlineDuration, toArrayData, userData?.name, userData?.nama_lengkap, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
 
     // Menu items data
     const menuItems: any[] = [
@@ -1656,7 +1860,7 @@ function HomeScreen() {
 
                     <TouchableOpacity
                         style={[styles.statsExportBtn, styles.statsExportBtnFullWidth]}
-                        onPress={handleCopyDailyRecap}
+                        onPress={() => setShowCopyModal(true)}
                         disabled={isCopyingDailyRecap}
                     >
                         <Ionicons name="copy-outline" size={14} color="#1d4f7a" />
@@ -1792,6 +1996,41 @@ function HomeScreen() {
                         <TouchableOpacity style={styles.actionModalCloseBtn} onPress={() => setShowShareModal(false)}>
                             <Text style={styles.actionModalCloseText}>Tutup</Text>
                         </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {showCopyModal && (
+                <View style={styles.actionModalOverlay}>
+                    <View style={styles.actionModalCard}>
+                        <Text style={styles.actionModalTitle}>Konfirmasi Copy Rekap Harian</Text>
+                        <Text style={styles.actionModalSubtitle}>Pilih tanggal untuk mengambil data rekap harian.</Text>
+
+                        <DatePickerInput
+                            label="Tanggal"
+                            value={copyDate}
+                            onChange={setCopyDate}
+                        />
+
+                        <View style={styles.actionModalButtonsRow}>
+                            <TouchableOpacity
+                                style={[styles.actionModalBtn, styles.actionModalBtnPrimary, { flex: 1 }]}
+                                onPress={() => handleCopyDailyRecapWithDate(copyDate)}
+                                disabled={isCopyingDailyRecap}
+                            >
+                                <Ionicons name="copy-outline" size={16} color="#fff" />
+                                <Text style={styles.actionModalBtnPrimaryText}>{isCopyingDailyRecap ? 'Proses...' : 'Copy'}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.actionModalBtn, styles.actionModalBtnSecondary, { flex: 1 }]}
+                                onPress={() => setShowCopyModal(false)}
+                                disabled={isCopyingDailyRecap}
+                            >
+                                <Ionicons name="close-outline" size={16} color="#1d4f7a" />
+                                <Text style={styles.actionModalBtnSecondaryText}>Batal</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             )}

@@ -6,7 +6,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { memo, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Clipboard, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import GlassBackground from './glass-background';
 
 interface TransaksiDetailModalProps {
     transaksi: any;
@@ -730,7 +729,7 @@ const TransaksiDetailModal = memo(({
 
     return (
         <View style={styles.modalContainer}>
-            <GlassBackground />
+            {/* <GlassBackground /> */}
             {/* Modal Header - Only show if not in page mode */}
             {!isPageMode && (
                 <View style={styles.modalHeader}>
