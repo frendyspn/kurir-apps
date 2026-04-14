@@ -17,19 +17,59 @@ interface DropdownInputProps {
     placeholder?: string;
     error?: string;
     disabled?: boolean;
+    androidBottomOffset?: number;
 }
 
-const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, options, placeholder, error, disabled }) => {
+const DropdownInput: React.FC<DropdownInputProps> = ({
+    label,
+    value,
+    onChange,
+    options,
+    placeholder,
+    error,
+    disabled,
+    androidBottomOffset = -10,
+}) => {
     const [showModal, setShowModal] = useState(false);
     const overlayOpacity = useState(new Animated.Value(0))[0];
     const [searchText, setSearchText] = useState('');
 
     const selectedOption = options.find(opt => opt.value === value);
 
+    // Normalize text untuk filtering (trim whitespace dan handle diacritics)
+    const normalizeText = (text: string): string => {
+        return text
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, ''); // Remove diacritics
+    };
+
+    // Fuzzy match - cocok meski tidak persis substring
+    const fuzzyMatch = (label: string, search: string): boolean => {
+        let labelIdx = 0;
+        for (let searchIdx = 0; searchIdx < search.length; searchIdx++) {
+            const char = search[searchIdx];
+            const foundIdx = label.indexOf(char, labelIdx);
+            if (foundIdx === -1) return false;
+            labelIdx = foundIdx + 1;
+        }
+        return true;
+    };
+
     // Filter options by searchText
-    const filteredOptions = options.filter(opt =>
-        opt.label.toLowerCase().includes(searchText.toLowerCase())
-    );
+    const filteredOptions = options.filter(opt => {
+        if (!searchText.trim()) return true; // Tampilkan semua jika search kosong
+
+        const normalizedLabel = normalizeText(opt.label);
+        const normalizedSearch = normalizeText(searchText);
+        
+        // Coba 2 metode: substring dulu, jika tidak cocok coba fuzzy
+        const isSubstringMatch = normalizedLabel.includes(normalizedSearch);
+        const isFuzzyMatch = fuzzyMatch(normalizedLabel, normalizedSearch);
+        
+        return isSubstringMatch || isFuzzyMatch;
+    });
 
     const handleOpenModal = () => {
         setShowModal(true);
@@ -84,6 +124,8 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                 visible={showModal}
                 transparent
                 animationType="none"
+                statusBarTranslucent={true}
+                navigationBarTranslucent={true}
                 onRequestClose={handleCloseModal}
             >
                 {/* Full screen container with backdrop and bottom sheet as siblings */}
@@ -98,8 +140,13 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                     </Animated.View>
 
                     {/* Bottom sheet modal content */}
-                    <View style={styles.bottomSheetContainer}>
-                        <View style={options.length < 3 ? styles.modalContentAuto : styles.modalContent}>
+                    <View
+                        style={[
+                            styles.bottomSheetContainer,
+                            { bottom: Platform.OS === 'android' ? androidBottomOffset : 0 },
+                        ]}
+                    >
+                        <View style={styles.modalContent}>
                             <View style={styles.modalHeader}>
                                 <Text style={styles.modalTitle}>{label}</Text>
                                 <TouchableOpacity onPress={handleCloseModal}>
@@ -118,69 +165,36 @@ const DropdownInput: React.FC<DropdownInputProps> = ({ label, value, onChange, o
                                     autoFocus={true}
                                 />
                             </View>
-                            {filteredOptions.length < 3 ? (
-                                <View style={styles.nonScrollList}>
-                                    {filteredOptions.map((option, index) => (
-                                        <TouchableOpacity
-                                            key={`${option.value}-${index}`}
+                            <ScrollView style={styles.optionsList} nestedScrollEnabled={true}>
+                                {filteredOptions.map((option, index) => (
+                                    <TouchableOpacity
+                                        key={`${option.value}-${index}`}
+                                        style={[
+                                            styles.optionItem,
+                                            value === option.value && styles.optionItemSelected,
+                                        ]}
+                                        onPress={() => {
+                                            onChange(option.value);
+                                            handleCloseModal();
+                                        }}
+                                    >
+                                        <Text
                                             style={[
-                                                styles.optionItem,
-                                                value === option.value && styles.optionItemSelected,
+                                                styles.optionText,
+                                                value === option.value && styles.optionTextSelected,
                                             ]}
-                                            onPress={() => {
-                                                onChange(option.value);
-                                                handleCloseModal();
-                                            }}
                                         >
-                                            <Text
-                                                style={[
-                                                    styles.optionText,
-                                                    value === option.value && styles.optionTextSelected,
-                                                ]}
-                                            >
-                                                {option.label}
-                                            </Text>
-                                            {value === option.value && (
-                                                <Ionicons name="checkmark" size={20} color="#0097A7" />
-                                            )}
-                                        </TouchableOpacity>
-                                    ))}
-                                    {filteredOptions.length === 0 && (
-                                        <Text style={styles.emptyText}>Tidak ada hasil</Text>
-                                    )}
-                                </View>
-                            ) : (
-                                <ScrollView style={styles.optionsList}>
-                                    {filteredOptions.map((option, index) => (
-                                        <TouchableOpacity
-                                            key={`${option.value}-${index}`}
-                                            style={[
-                                                styles.optionItem,
-                                                value === option.value && styles.optionItemSelected,
-                                            ]}
-                                            onPress={() => {
-                                                onChange(option.value);
-                                                handleCloseModal();
-                                            }}
-                                        >
-                                            <Text
-                                                style={[
-                                                    styles.optionText,
-                                                    value === option.value && styles.optionTextSelected,
-                                                ]}
-                                            >
-                                                {option.label}
-                                            </Text>
-                                            {value === option.value && (
-                                                <Ionicons name="checkmark" size={20} color="#0097A7" />
-                                            )}
-                                        </TouchableOpacity>
-                                    ))}
-                                    {filteredOptions.length === 0 && (
-                                        <Text style={styles.emptyText}>Tidak ada hasil</Text>
-                                    )}
-                                </ScrollView>
-                            )}
+                                            {option.label}
+                                        </Text>
+                                        {value === option.value && (
+                                            <Ionicons name="checkmark" size={20} color="#0097A7" />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                                {filteredOptions.length === 0 && (
+                                    <Text style={styles.emptyText}>Tidak ada hasil</Text>
+                                )}
+                            </ScrollView>
                         </View>
                     </View>
                 </View>
@@ -254,24 +268,22 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     bottomSheetContainer: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
         width: '100%',
         alignItems: 'center',
         justifyContent: 'flex-end',
         zIndex: 1,
-        paddingBottom: Platform.OS === 'android' ? 0 : 34, // accommodate nav bar / home indicator
+        paddingBottom: Platform.OS === 'android' ? 0 : 34,
     },
     modalContent: {
         backgroundColor: '#ffffff',
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
-        maxHeight: '70%',
-        width: '100%',
-        alignSelf: 'center',
-    },
-    modalContentAuto: {
-        backgroundColor: '#ffffff',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
+        minHeight: '56%',
+        maxHeight: '84%',
         width: '100%',
         alignSelf: 'center',
     },
@@ -289,11 +301,7 @@ const styles = StyleSheet.create({
         color: '#212529',
     },
     optionsList: {
-        maxHeight: 400,
-    },
-    nonScrollList: {
-        // Let the items flow naturally without scroll when few options
-        width: '100%',
+        maxHeight: 520,
     },
     optionItem: {
         flexDirection: 'row',

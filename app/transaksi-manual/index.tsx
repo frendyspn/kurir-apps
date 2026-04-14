@@ -3,12 +3,14 @@ import DropdownInput from '@/components/dropdown-input';
 import SearchInput from '@/components/search-input';
 import TransaksiDetailModal from '@/components/transaksi-detail-modal';
 import { apiService } from '@/services/api';
+import { onlineStatusEvents } from '@/utils/onlineStatusEvents';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ExportLaporanModal from '../../components/export-laporan-modal';
 
 // Memoized Transaksi Item Component
 const TransaksiItem = memo(({ item, onPress }: { item: any; onPress: (item: any) => void }) => {
@@ -77,8 +79,12 @@ TransaksiItem.displayName = 'TransaksiItem';
 
 export default function TransaksiManualScreen() {
     const insets = useSafeAreaInsets();
+    const now = new Date();
     const [startDate, setStartDate] = useState<Date>(new Date());
     const [endDate, setEndDate] = useState<Date>(new Date());
+    const [dateFilterMode, setDateFilterMode] = useState<'range' | 'monthly'>('range');
+    const [selectedYear, setSelectedYear] = useState<string>(String(now.getFullYear()));
+    const [selectedMonth, setSelectedMonth] = useState<string>(String(now.getMonth() + 1).padStart(2, '0'));
     const [serviceType, setServiceType] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
@@ -94,6 +100,12 @@ export default function TransaksiManualScreen() {
     const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
     const [selectedTransaksi, setSelectedTransaksi] = useState<any>(null);
 
+    // Online status
+    const [isOnline, setIsOnline] = useState<boolean>(false);
+
+    // Export modal
+    const [isExportModalVisible, setIsExportModalVisible] = useState<boolean>(false);
+
     // Use ref to track if initial load is done
     const isInitialLoad = useRef(true);
 
@@ -105,6 +117,46 @@ export default function TransaksiManualScreen() {
         return `${year}-${month}-${day}`;
     };
 
+    const monthOptions = useMemo(() => ([
+        { label: 'Januari', value: '01' },
+        { label: 'Februari', value: '02' },
+        { label: 'Maret', value: '03' },
+        { label: 'April', value: '04' },
+        { label: 'Mei', value: '05' },
+        { label: 'Juni', value: '06' },
+        { label: 'Juli', value: '07' },
+        { label: 'Agustus', value: '08' },
+        { label: 'September', value: '09' },
+        { label: 'Oktober', value: '10' },
+        { label: 'November', value: '11' },
+        { label: 'Desember', value: '12' },
+    ]), []);
+
+    const yearOptions = useMemo(() => {
+        const currentYear = new Date().getFullYear();
+        const options: Array<{ label: string; value: string }> = [];
+        for (let year = 2024; year <= currentYear; year++) {
+            options.push({ label: String(year), value: String(year) });
+        }
+        return options;
+    }, []);
+
+    const getCurrentFilterRange = useCallback(() => {
+        if (dateFilterMode === 'monthly') {
+            const year = Number(selectedYear);
+            const month = Number(selectedMonth);
+            const start = `${selectedYear}-${selectedMonth}-01`;
+            const lastDay = new Date(year, month, 0).getDate();
+            const end = `${selectedYear}-${selectedMonth}-${String(lastDay).padStart(2, '0')}`;
+            return { startDate: start, endDate: end };
+        }
+
+        return {
+            startDate: formatDate(startDate),
+            endDate: formatDate(endDate),
+        };
+    }, [dateFilterMode, endDate, selectedMonth, selectedYear, startDate]);
+
     // Handle open modal
     const handleOpenDetail = useCallback((item: any) => {
         setSelectedTransaksi(item);
@@ -115,6 +167,22 @@ export default function TransaksiManualScreen() {
     const handleCloseModal = useCallback(() => {
         setIsModalVisible(false);
         setSelectedTransaksi(null);
+    }, []);
+
+    // Read online status from AsyncStorage and subscribe to changes
+    useEffect(() => {
+        const loadOnlineStatus = async () => {
+            const data = await AsyncStorage.getItem('userData');
+            if (data) {
+                const parsed = JSON.parse(data);
+                setIsOnline(parsed.is_online === 1 || parsed.is_online === '1' || parsed.is_online === true);
+            }
+        };
+        loadOnlineStatus();
+
+        const handleStatusChange = (status: boolean) => setIsOnline(status);
+        onlineStatusEvents.on('statusChanged', handleStatusChange);
+        return () => { onlineStatusEvents.off('statusChanged', handleStatusChange); };
     }, []);
 
     // Fetch jenis layanan from API
@@ -194,9 +262,11 @@ export default function TransaksiManualScreen() {
         try {
             setLoadingTransaksi(true);
 
+            const range = getCurrentFilterRange();
+
             // Use current state values if filters not provided
-            const currentStartDate = filters?.startDate || formatDate(startDate);
-            const currentEndDate = filters?.endDate || formatDate(endDate);
+            const currentStartDate = filters?.startDate || range.startDate;
+            const currentEndDate = filters?.endDate || range.endDate;
 
             const response = await apiService.getListTransaksiManual(
                 phoneNumber,
@@ -218,6 +288,14 @@ export default function TransaksiManualScreen() {
                 }
 
                 setTransaksiList(dataArray);
+                // Sync selectedTransaksi jika modal sedang terbuka (misal: baru kembali dari edit)
+                setSelectedTransaksi((prev: any) => {
+                    if (!prev) return prev;
+                    const updated = dataArray.find(
+                        (item: any) => item.id === prev.id || item.kode_order === prev.kode_order
+                    );
+                    return updated ?? prev;
+                });
             } else {
                 setTransaksiList([]);
             }
@@ -227,7 +305,7 @@ export default function TransaksiManualScreen() {
         } finally {
             setLoadingTransaksi(false);
         }
-    }, [startDate, endDate]); // Only depend on date states
+    }, [getCurrentFilterRange, userData?.id_konsumen]);
 
     // Handle refresh after approve
     const handleRefreshAfterApprove = useCallback(() => {
@@ -242,8 +320,7 @@ export default function TransaksiManualScreen() {
     }, []);
 
     const handleApplyFilter = () => {
-        const formattedStartDate = formatDate(startDate);
-        const formattedEndDate = formatDate(endDate);
+        const { startDate: formattedStartDate, endDate: formattedEndDate } = getCurrentFilterRange();
 
         console.log('Apply filter:', {
             startDate: formattedStartDate,
@@ -268,8 +345,11 @@ export default function TransaksiManualScreen() {
     };
 
     const handleResetFilter = () => {
+        setDateFilterMode('range');
         setStartDate(new Date());
         setEndDate(new Date());
+        setSelectedYear(String(new Date().getFullYear()));
+        setSelectedMonth(String(new Date().getMonth() + 1).padStart(2, '0'));
         setServiceType('');
         setSearchQuery('');
     };
@@ -287,12 +367,7 @@ export default function TransaksiManualScreen() {
 
                 <Text style={styles.headerTitle}>Pasca Order</Text>
 
-                {/* <TouchableOpacity
-                    style={styles.addButton}
-                    onPress={() => router.push('/transaksi-manual/tambah')}
-                >
-                    <Ionicons name="add-circle-outline" size={28} color="#ffffff" />
-                </TouchableOpacity> */}
+                <View style={styles.headerRight} />
             </View>
 
             {/* Content */}
@@ -309,7 +384,7 @@ export default function TransaksiManualScreen() {
                     >
                         <View style={styles.filterHeaderLeft}>
                             <Ionicons name="funnel-outline" size={20} color="#0097A7" />
-                            <Text style={styles.filterTitle}>Filter Transaksi</Text>
+                            <Text style={styles.filterTitle}>Filter & Export</Text>
                         </View>
                         <Ionicons
                             name={isFilterExpanded ? "chevron-up-outline" : "chevron-down-outline"}
@@ -320,19 +395,82 @@ export default function TransaksiManualScreen() {
 
                     {isFilterExpanded && (
                         <View style={styles.filterContent}>
-                            <DatePickerInput
-                                label="Tanggal Awal"
-                                value={startDate}
-                                onChange={setStartDate}
-                                placeholder="Pilih tanggal awal"
-                            />
+                            {/* Mode Tanggal - Button Selection */}
+                            <View style={styles.modeSelectionContainer}>
+                                <Text style={styles.modeLabel}>Mode Tanggal</Text>
+                                <View style={styles.modeButtonsGroup}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.modeButton,
+                                            dateFilterMode === 'range' && styles.modeButtonActive,
+                                        ]}
+                                        onPress={() => setDateFilterMode('range')}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.modeButtonText,
+                                                dateFilterMode === 'range' && styles.modeButtonTextActive,
+                                            ]}
+                                        >
+                                            Range Tanggal
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.modeButton,
+                                            dateFilterMode === 'monthly' && styles.modeButtonActive,
+                                        ]}
+                                        onPress={() => setDateFilterMode('monthly')}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.modeButtonText,
+                                                dateFilterMode === 'monthly' && styles.modeButtonTextActive,
+                                            ]}
+                                        >
+                                            Bulanan
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
 
-                            <DatePickerInput
-                                label="Tanggal Akhir"
-                                value={endDate}
-                                onChange={setEndDate}
-                                placeholder="Pilih tanggal akhir"
-                            />
+                            {dateFilterMode === 'monthly' ? (
+                                <>
+                                    <DropdownInput
+                                        label="Tahun"
+                                        value={selectedYear}
+                                        onChange={setSelectedYear}
+                                        options={yearOptions}
+                                        placeholder="Pilih tahun"
+                                        androidBottomOffset={-84}
+                                    />
+
+                                    <DropdownInput
+                                        label="Bulan"
+                                        value={selectedMonth}
+                                        onChange={setSelectedMonth}
+                                        options={monthOptions}
+                                        placeholder="Pilih bulan"
+                                        androidBottomOffset={-84}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <DatePickerInput
+                                        label="Tanggal Awal"
+                                        value={startDate}
+                                        onChange={setStartDate}
+                                        placeholder="Pilih tanggal awal"
+                                    />
+
+                                    <DatePickerInput
+                                        label="Tanggal Akhir"
+                                        value={endDate}
+                                        onChange={setEndDate}
+                                        placeholder="Pilih tanggal akhir"
+                                    />
+                                </>
+                            )}
 
                             {loading ? (
                                 <View style={styles.loadingContainer}>
@@ -346,6 +484,7 @@ export default function TransaksiManualScreen() {
                                     onChange={setServiceType}
                                     options={serviceTypeOptions}
                                     placeholder="Pilih tipe layanan"
+                                    androidBottomOffset={-84}
                                 />
                             )}
 
@@ -362,16 +501,24 @@ export default function TransaksiManualScreen() {
                                     style={styles.resetButton}
                                     onPress={handleResetFilter}
                                 >
-                                    <Ionicons name="refresh-outline" size={18} color="#6c757d" />
+                                    <Ionicons name="refresh-outline" size={16} color="#6c757d" />
                                     <Text style={styles.resetButtonText}>Reset</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.exportFilterButton}
+                                    onPress={() => setIsExportModalVisible(true)}
+                                >
+                                    <Ionicons name="download-outline" size={16} color="#ffffff" />
+                                    <Text style={styles.exportFilterButtonText}>Export</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
                                     style={styles.applyButton}
                                     onPress={handleApplyFilter}
                                 >
-                                    <Text style={styles.applyButtonText}>Terapkan Filter</Text>
-                                    <Ionicons name="checkmark-outline" size={18} color="#ffffff" />
+                                    <Ionicons name="checkmark-outline" size={16} color="#ffffff" />
+                                    <Text style={styles.applyButtonText}>Terapkan</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -402,10 +549,16 @@ export default function TransaksiManualScreen() {
             </ScrollView>
 
             <TouchableOpacity
-                style={styles.fabPascaOrder}
-                onPress={() => router.push('/transaksi-manual/tambah')}
+                style={[styles.fabPascaOrder, !isOnline && styles.fabDisabled]}
+                onPress={() => {
+                    if (!isOnline) {
+                        Alert.alert('Status Offline', 'Aktifkan status online terlebih dahulu untuk menambah transaksi baru.');
+                        return;
+                    }
+                    router.push('/transaksi-manual/tambah');
+                }}
             >
-                <View style={styles.fabIconContainer}>
+                <View style={[styles.fabIconContainer, !isOnline && styles.fabIconDisabled]}>
                     <Ionicons name="add-outline" size={32} color="#fff" />
                 </View>
             </TouchableOpacity>
@@ -419,6 +572,16 @@ export default function TransaksiManualScreen() {
             >
                 {selectedTransaksi && <TransaksiDetailModal transaksi={selectedTransaksi} onClose={handleCloseModal} onRefresh={handleRefreshAfterApprove} onUpdateTransaksi={handleUpdateSelectedTransaksi} />}
             </Modal>
+
+            {/* Modal Export Laporan */}
+            <ExportLaporanModal
+                visible={isExportModalVisible}
+                onClose={() => setIsExportModalVisible(false)}
+                id_konsumen={userData?.id_konsumen || ''}
+                startDate={getCurrentFilterRange().startDate}
+                endDate={getCurrentFilterRange().endDate}
+                courierName={userData?.name || userData?.nama_lengkap || userData?.nama_sopir || userData?.nm_sopir}
+            />
         </View>
     );
 }
@@ -441,6 +604,9 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     addButton: {
+        padding: 4,
+    },
+    exportButton: {
         padding: 4,
     },
     headerTitle: {
@@ -491,7 +657,7 @@ const styles = StyleSheet.create({
     },
     filterActions: {
         flexDirection: 'row',
-        gap: 12,
+        gap: 8,
         marginTop: 8,
     },
     resetButton: {
@@ -501,30 +667,46 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         backgroundColor: '#f8f9fa',
         borderRadius: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
+        paddingVertical: 11,
+        paddingHorizontal: 8,
         borderWidth: 1,
         borderColor: '#dee2e6',
-        gap: 6,
+        gap: 4,
     },
     resetButtonText: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '600',
         color: '#6c757d',
     },
+    exportFilterButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f59e0b',
+        borderRadius: 8,
+        paddingVertical: 11,
+        paddingHorizontal: 8,
+        gap: 4,
+    },
+    exportFilterButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#ffffff',
+    },
     applyButton: {
-        flex: 2,
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#0097A7',
         borderRadius: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        gap: 6,
+        paddingVertical: 11,
+        paddingHorizontal: 8,
+        gap: 4,
     },
     applyButtonText: {
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '600',
         color: '#ffffff',
     },
@@ -688,5 +870,47 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 10,
         color: 'rgba(0,151,167,0.95)',
+    },
+    fabDisabled: {
+        opacity: 0.5,
+    },
+    fabIconDisabled: {
+        backgroundColor: '#adb5bd',
+    },
+    modeSelectionContainer: {
+        marginBottom: 16,
+    },
+    modeLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#212529',
+        marginBottom: 8,
+    },
+    modeButtonsGroup: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    modeButton: {
+        flex: 1,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#dee2e6',
+        backgroundColor: '#ffffff',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modeButtonActive: {
+        backgroundColor: '#0097A7',
+        borderColor: '#0097A7',
+    },
+    modeButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#6c757d',
+    },
+    modeButtonTextActive: {
+        color: '#ffffff',
     },
 });

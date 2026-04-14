@@ -7,6 +7,7 @@ export default function TransaksiManualLayout() {
       <GlassBackground />
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="tambah" options={{ headerShown: false }} />
+      <Stack.Screen name="edit" options={{ headerShown: false }} />
     </Stack>
   );
 }

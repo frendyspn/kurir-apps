@@ -19,6 +19,7 @@ import { AuthColors } from '../../constants/theme';
 import { apiService } from '../../services/api';
 import socketService from '../../services/socket';
 import { notificationEvents } from '../../utils/notificationEvents'; // sesuaikan path
+import { onlineStatusEvents } from '../../utils/onlineStatusEvents';
 
 
 
@@ -112,6 +113,7 @@ function HomeScreen() {
         try {
             await apiService.updateStatusOnline(userData.no_hp, next ? 1 : 0);
             setIsOnline(next);
+            onlineStatusEvents.emit('statusChanged', next);
             const stored = await AsyncStorage.getItem('userData');
             if (stored) {
                 const parsed = JSON.parse(stored);
@@ -120,6 +122,7 @@ function HomeScreen() {
         } catch (_) {
             // Tetap toggle UI walau API belum ada
             setIsOnline(next);
+            onlineStatusEvents.emit('statusChanged', next);
         } finally {
             setTogglingOnline(false);
         }
@@ -972,7 +975,7 @@ function HomeScreen() {
             console.log(userData?.nama_lengkap)
             const startDate = formatDateForApi(shareStartDate);
             const endDate = formatDateForApi(shareEndDate);
-            const courierName = userData?.name || userData?.nama_lengkap || userData?.nama_sopir || userData?.nm_sopir;
+            const courierName = userData?.nama_lengkap;
             const res = await apiService.exportStatistikPdf(userData.no_hp, selectedFilter, startDate, endDate, courierName);
 
             if (!res?.success) {
@@ -1006,6 +1009,7 @@ function HomeScreen() {
             let komisi = pickSummaryValue(['komisi', 'komisi_total', 'total_komisi']);
             let pelanggan = Math.round(pickSummaryValue(['pelanggan', 'pelanggan_baru', 'pelanggan_total', 'total_pelanggan']));
             let onlineMinutes = Math.round(pickSummaryValue(['online_minutes', 'waktu_online_menit', 'total_online_minutes']));
+            let fee = pickSummaryValue(['fee']);
 
             if (pesanan === 0 && omset === 0 && pendapatan === 0 && komisi === 0 && pelanggan === 0) {
                 const fallbackRes = await apiService.getPendapatanCustom(userData.no_hp, startDate, endDate, selectedFilter);
@@ -1018,10 +1022,7 @@ function HomeScreen() {
             }
 
             const kurirName =
-                userData?.name ||
-                userData?.nama ||
-                userData?.nama_sopir ||
-                userData?.nm_sopir ||
+                userData?.nama_lengkap
                 '-';
             const kurirPhone = userData?.no_hp || '-';
 
@@ -1035,6 +1036,7 @@ function HomeScreen() {
                 `Pesanan: ${pesanan}`,
                 `Omset: ${formatCurrency(omset)}`,
                 `Pendapatan: ${formatCurrency(pendapatan)}`,
+                `Potongan Ongkir: ${formatCurrency(fee)}`,
                 `Komisi: ${formatCurrency(komisi)}`,
                 `Pelanggan: ${pelanggan}`,
                 `Waktu Online: ${formatOnlineDuration(onlineMinutes)}`,
@@ -1333,10 +1335,11 @@ function HomeScreen() {
             const totalDurasiOn = formatOnlineDuration(totalOnlineMinutes);
 
             const selectedDateFormatted = formatDateForApi(selectedDate);
-            const [liveOrderRes, manualOrderRes, agentRes] = await Promise.all([
+            const [liveOrderRes, manualOrderRes, agentRes, rekapKomisiRes] = await Promise.all([
                 apiService.getListLiveOrder(userData.no_hp, selectedDateFormatted, selectedDateFormatted),
                 apiService.getListTransaksiManual(userData.no_hp, selectedDateFormatted, selectedDateFormatted),
                 apiService.getListAgent(userData.no_hp),
+                apiService.getRekapKomisi(userData.id_konsumen, selectedDateFormatted, selectedDateFormatted),
             ]);
 
             const liveOrdersRaw = toArrayData(liveOrderRes);
@@ -1403,6 +1406,27 @@ function HomeScreen() {
 
             // Gabungkan semua orders (live + manual)
             const allOrders = [...liveOrdersRaw, ...manualOrdersRaw];
+            const totalPemasukan = allOrders.reduce((sum, item) => sum + getOrderValue(item), 0);
+
+            const rekapKomisiRows = Array.isArray(rekapKomisiRes?.data?.data)
+                ? rekapKomisiRes.data.data
+                : Array.isArray(rekapKomisiRes?.data)
+                    ? rekapKomisiRes.data
+                    : [];
+            const rekapKomisiSummary = rekapKomisiRes?.data?.summary || {};
+
+            const getNetByType = (type: string): number => {
+                const found = rekapKomisiRows.find((row: any) => String(row?.type || '').toUpperCase() === type);
+                return Number(found?.net_amount || 0);
+            };
+
+            const komisiPotongan = getNetByType('KOMISI');
+            const komisiKoordinatorCabang = getNetByType('KOORDINATOR_KOTA');
+            const komisiKoordinatorKurir = getNetByType('KOORDINATOR_KECAMATAN');
+            const komisiAgen = getNetByType('AGEN');
+            const komisiRefferal = getNetByType('REFFERAL');
+            const totalPendapatan = Number(rekapKomisiSummary?.net_total || 0);
+            const pendapatanOngkir = totalPemasukan - komisiPotongan;
 
             // Pisahkan order dari agent lain dan order sendiri
             const ordersFromAgent = allOrders.filter((item: any) => {
@@ -1477,7 +1501,17 @@ function HomeScreen() {
                 '----------------------------------',
                 '',
                 `Jumlah Pesanan: ${ordersFromAgent.length + ordersFromSelf.length}`,
-                `Total Pemasukan: ${formatCurrency(allOrders.reduce((sum, item) => sum + getOrderValue(item), 0))}`,
+                `Total Pemasukan: ${formatCurrency(totalPemasukan)}`,
+                `Total Potongan: ${formatCurrency(komisiPotongan)}`,
+                '',
+                'Jumlah Pendapatan:',
+                `- Pendapatan Ongkir = ${formatCurrency(totalPemasukan-komisiPotongan)}`,
+                `- Komisi Koordinator Cabang = ${formatCurrency(komisiKoordinatorCabang)}`,
+                `- Komisi Koordinator Kurir = ${formatCurrency(komisiKoordinatorKurir)}`,
+                `- Komisi Agen = ${formatCurrency(komisiAgen)}`,
+                `- Komisi Refferal = ${formatCurrency(komisiRefferal)}`,
+                '',
+                `Total Pendapatan = ${formatCurrency(totalPendapatan)}`,
                 '',
                 '--------------------------------',
                 '',
@@ -1694,15 +1728,26 @@ function HomeScreen() {
                             <View style={styles.agentMenuCard}>
                                 <View style={styles.agentMenuInline}>
                                     <Text style={styles.agentMenuTitle}>Menu Agen</Text>
-                                    <TouchableOpacity
-                                        style={styles.agentQuickAction}
-                                        onPress={() => router.push('/live-order')}
-                                    >
-                                        <View style={styles.agentQuickIconWrap}>
-                                            <Ionicons name="flash-outline" size={14} color="#0097A7" />
-                                        </View>
-                                        <Text style={styles.agentQuickLabel}>Live Order</Text>
-                                    </TouchableOpacity>
+                                    <View style={styles.agentQuickActions}>
+                                        <TouchableOpacity
+                                            style={styles.agentQuickAction}
+                                            onPress={() => router.push('/live-order')}
+                                        >
+                                            <View style={styles.agentQuickIconWrap}>
+                                                <Ionicons name="flash-outline" size={14} color="#0097A7" />
+                                            </View>
+                                            <Text style={styles.agentQuickLabel}>Live Order</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.agentQuickAction, styles.agentQuickActionMember]}
+                                            onPress={() => router.push('/transaksi-member/' as never)}
+                                        >
+                                            <View style={[styles.agentQuickIconWrap, styles.agentQuickIconMember]}>
+                                                <Ionicons name="people-outline" size={14} color="#7c3aed" />
+                                            </View>
+                                            <Text style={[styles.agentQuickLabel, styles.agentQuickLabelMember]}>Transaksi Member</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             </View>
                         </View>
@@ -2293,6 +2338,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         gap: 8,
     },
+    agentQuickActions: {
+        flexDirection: 'row',
+        gap: 6,
+    },
     agentMenuTitle: {
         fontSize: 12,
         color: '#6c757d',
@@ -2322,6 +2371,16 @@ const styles = StyleSheet.create({
     agentQuickLabel: {
         fontSize: 10,
         fontWeight: '600',
+        color: '#1d4f7a',
+    },
+    agentQuickActionMember: {
+        borderColor: '#d7ecff',
+        backgroundColor: '#f5faff',
+    },
+    agentQuickIconMember: {
+        backgroundColor: '#e7f1ff',
+    },
+    agentQuickLabelMember: {
         color: '#1d4f7a',
     },
     orderStatsSection: {

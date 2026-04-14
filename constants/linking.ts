@@ -47,6 +47,13 @@ const linking: LinkingOptions<ReactNavigation.RootParamList> = {
         },
       },
 
+      // Member transaction screens
+      'transaksi-member': {
+        screens: {
+          index: 'member-transactions',
+        },
+      },
+
       // Contact screens
       'kontak': {
         screens: {

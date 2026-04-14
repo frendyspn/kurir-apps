@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "KlikQuick",
+    "name": "QuickDriver",
     "slug": "satu-kurir",
     "version": "1.0.2",
     "orientation": "portrait",
@@ -39,8 +39,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 500,
+          "image": "./assets/images/splash-icon-android.png",
+          "imageWidth": 1200,
           "resizeMode": "contain",
           "backgroundColor": "#0097A7",
           "dark": {
@@ -68,8 +68,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ae6766a9-8ac2-4da4-bab4-96413dcb46b3"
+        "projectId": "0465a209-852e-47f0-81ba-803afaf15a16"
       }
-    }
+    },
+    "owner": "frnspn03"
   }
 }

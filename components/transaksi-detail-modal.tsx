@@ -1,5 +1,6 @@
 import { apiService } from '@/services/api';
 import socketService from '@/services/socket';
+import { onlineStatusEvents } from '@/utils/onlineStatusEvents';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -50,14 +51,23 @@ const TransaksiDetailModal = memo(({
     const [isCustomerReady, setIsCustomerReady] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
+    // Online status
+    const [isOnline, setIsOnline] = useState(false);
+
     useEffect(() => {
         const getUserData = async () => {
             const data = await AsyncStorage.getItem('userData');
             if (data) {
-                setUserData(JSON.parse(data));
+                const parsed = JSON.parse(data);
+                setUserData(parsed);
+                setIsOnline(parsed.is_online === 1 || parsed.is_online === '1' || parsed.is_online === true);
             }
         };
         getUserData();
+
+        const handleStatusChange = (status: boolean) => setIsOnline(status);
+        onlineStatusEvents.on('statusChanged', handleStatusChange);
+        return () => { onlineStatusEvents.off('statusChanged', handleStatusChange); };
     }, []);
 
     // Update currentTransaksi ketika props berubah
@@ -453,6 +463,10 @@ const TransaksiDetailModal = memo(({
     };
 
     const handleApprove = async () => {
+        if (!isOnline) {
+            Alert.alert('Status Offline', 'Aktifkan status online terlebih dahulu untuk melakukan aksi ini.');
+            return;
+        }
         if (approveText.toUpperCase() !== 'SETUJU') {
             Alert.alert('Perhatian', 'Silakan ketik "SETUJU" untuk menyetujui transaksi');
             return;
@@ -503,6 +517,10 @@ const TransaksiDetailModal = memo(({
     };
 
     const handleAmbilOrder = async () => {
+        if (!isOnline) {
+            Alert.alert('Status Offline', 'Aktifkan status online terlebih dahulu untuk mengambil order.');
+            return;
+        }
         try {
             setIsApproving(true);
 
@@ -582,6 +600,10 @@ const TransaksiDetailModal = memo(({
     };
 
     const handlePickupOrder = async () => {
+        if (!isOnline) {
+            Alert.alert('Status Offline', 'Aktifkan status online terlebih dahulu untuk melakukan pickup.');
+            return;
+        }
         try {
             setIsApproving(true);
 
@@ -649,6 +671,10 @@ const TransaksiDetailModal = memo(({
     };
 
     const handleCompleteOrder = async () => {
+        if (!isOnline) {
+            Alert.alert('Status Offline', 'Aktifkan status online terlebih dahulu untuk menyelesaikan order.');
+            return;
+        }
         try {
             setIsApproving(true);
 
@@ -713,6 +739,32 @@ const TransaksiDetailModal = memo(({
         } finally {
             setIsApproving(false);
         }
+    };
+
+    // Cek apakah transaksi masih dalam 2 hari sejak dibuat
+    const isWithin2Days = (): boolean => {
+        if (!currentTransaksi.tanggal_order) return false;
+        const orderDate = new Date(currentTransaksi.tanggal_order);
+        const now = new Date();
+        const diffMs = now.getTime() - orderDate.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+        return diffHours <= 48;
+    };
+
+    // Cek apakah user boleh edit (kurir yang bersangkutan atau agen)
+    const canEditTransaksi = (): boolean => {
+        const isKurir =
+            userData?.id_konsumen === currentTransaksi.id_kurir ||
+            userData?.no_hp === currentTransaksi.no_hp_kurir;
+        const isAgen = userData?.agen === '1';
+        return isKurir || isAgen;
+    };
+
+    const handleEditTransaksi = () => {
+        router.push({
+            pathname: '/transaksi-manual/edit',
+            params: { transaksi: JSON.stringify(currentTransaksi) },
+        });
     };
 
     const handleShare = async () => {
@@ -1352,10 +1404,10 @@ const TransaksiDetailModal = memo(({
                         <TouchableOpacity
                             style={[
                                 styles.approveButton,
-                                (approveText.toUpperCase() !== 'SETUJU' || isApproving) && styles.approveButtonDisabled
+                                (approveText.toUpperCase() !== 'SETUJU' || isApproving || !isOnline) && styles.approveButtonDisabled
                             ]}
                             onPress={handleApprove}
-                            disabled={approveText.toUpperCase() !== 'SETUJU' || isApproving}
+                            disabled={approveText.toUpperCase() !== 'SETUJU' || isApproving || !isOnline}
                         >
                             {isApproving ? (
                                 <ActivityIndicator size="small" color="#ffffff" />
@@ -1374,9 +1426,9 @@ const TransaksiDetailModal = memo(({
                 {currentTransaksi.status?.toUpperCase() === 'SEARCH' && currentTransaksi.source === 'LIVE_ORDER' && (
                     <View style={styles.ambilOrderSection}>
                         <TouchableOpacity
-                            style={styles.ambilOrderButton}
+                            style={[styles.ambilOrderButton, !isOnline && styles.actionButtonDisabled]}
                             onPress={handleAmbilOrder}
-                            disabled={isApproving}
+                            disabled={isApproving || !isOnline}
                         >
                             {isApproving ? (
                                 <ActivityIndicator size="small" color="#ffffff" />
@@ -1437,12 +1489,13 @@ const TransaksiDetailModal = memo(({
                         <TouchableOpacity
                             style={[
                                 styles.pickupOrderButton,
-                                ((currentTransaksi.jenis_layanan === 'RIDE' && !isCustomerReady) ||
+                                (!isOnline ||
+                                 (currentTransaksi.jenis_layanan === 'RIDE' && !isCustomerReady) ||
                                  ((currentTransaksi.jenis_layanan === 'FOOD' || currentTransaksi.jenis_layanan === 'SHOP' || currentTransaksi.jenis_layanan === 'SEND') && !selectedImage)) &&
                                 styles.pickupOrderButtonDisabled
                             ]}
                             onPress={handlePickupOrder}
-                            disabled={isApproving || 
+                            disabled={isApproving || !isOnline ||
                                 (currentTransaksi.jenis_layanan === 'RIDE' && !isCustomerReady) ||
                                 ((currentTransaksi.jenis_layanan === 'FOOD' || currentTransaksi.jenis_layanan === 'SHOP' || currentTransaksi.jenis_layanan === 'SEND') && !selectedImage)}
                         >
@@ -1505,12 +1558,13 @@ const TransaksiDetailModal = memo(({
                         <TouchableOpacity
                             style={[
                                 styles.completeOrderButton,
-                                ((currentTransaksi.jenis_layanan === 'RIDE' && !isCustomerReady) ||
+                                (!isOnline ||
+                                 (currentTransaksi.jenis_layanan === 'RIDE' && !isCustomerReady) ||
                                  ((currentTransaksi.jenis_layanan === 'FOOD' || currentTransaksi.jenis_layanan === 'SHOP' || currentTransaksi.jenis_layanan === 'SEND') && !selectedImage)) &&
                                 styles.completeOrderButtonDisabled
                             ]}
                             onPress={handleCompleteOrder}
-                            disabled={isApproving ||
+                            disabled={isApproving || !isOnline ||
                                 (currentTransaksi.jenis_layanan === 'RIDE' && !isCustomerReady) ||
                                 ((currentTransaksi.jenis_layanan === 'FOOD' || currentTransaksi.jenis_layanan === 'SHOP' || currentTransaksi.jenis_layanan === 'SEND') && !selectedImage)}
                         >
@@ -1542,6 +1596,26 @@ const TransaksiDetailModal = memo(({
                 )}
 
                 
+
+                {/* Edit Transaksi - Kurir / Agen, dalam 2 hari */}
+                {isWithin2Days() && canEditTransaksi() && (
+                    <View style={styles.editTransaksiSection}>
+                        <View style={styles.editTransaksiHeader}>
+                            <Ionicons name="information-circle-outline" size={15} color="#64748b" />
+                            <Text style={styles.editTransaksiHint}>
+                                Transaksi masih bisa diedit hingga 48 jam sejak dibuat
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            style={styles.editTransaksiButton}
+                            onPress={handleEditTransaksi}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name="create-outline" size={20} color="#ffffff" />
+                            <Text style={styles.editTransaksiButtonText}>Edit Transaksi</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 <View style={{ height: 32 }} />
             </ScrollView>
@@ -1884,6 +1958,47 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
+    // Edit Transaksi (manual, 2-day window)
+    editTransaksiSection: {
+        backgroundColor: '#fff8f0',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#f59e0b',
+    },
+    editTransaksiHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 12,
+    },
+    editTransaksiHint: {
+        flex: 1,
+        fontSize: 12,
+        color: '#64748b',
+        lineHeight: 16,
+    },
+    editTransaksiButton: {
+        backgroundColor: '#f59e0b',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
+        elevation: 2,
+        shadowColor: '#f59e0b',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+    },
+    editTransaksiButtonText: {
+        color: '#ffffff',
+        fontSize: 15,
+        fontWeight: '700',
+    },
     editOrderSection: {
         backgroundColor: '#f8f9fa',
         borderRadius: 12,
@@ -2109,6 +2224,10 @@ const styles = StyleSheet.create({
     },
     shareButton: {
         padding: 4,
+    },
+    actionButtonDisabled: {
+        opacity: 0.45,
+        backgroundColor: '#adb5bd',
     },
 });
 

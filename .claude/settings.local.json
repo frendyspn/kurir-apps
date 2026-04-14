@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /c/xampp/htdocs/mobile/kurir-apps/components/*.tsx)",
+      "Bash(npx expo:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

@@ -273,6 +273,26 @@ class ApiService {
         });
     }
 
+    // Get List Transaksi Member Agen (transaksi yang id_agennya = user agen yg login)
+    async getListTransaksiMemberAgen(
+        idAgen: string,
+        startDate: string,
+        endDate: string,
+        serviceType?: string,
+        searchQuery?: string,
+    ): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('id_agen', idAgen);
+        formData.append('start_date', startDate);
+        formData.append('end_date', endDate);
+        if (serviceType) formData.append('service_type', serviceType);
+        if (searchQuery) formData.append('search', searchQuery);
+        return this.request(API_ENDPOINTS.LIST_TRANSAKSI_MEMBER_AGEN, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
     // Get List Agent
     async getListAgent(phoneNumber: string): Promise<ApiResponse> {
         const formData = new FormData();
@@ -310,6 +330,30 @@ class ApiService {
         formData.append('no_hp', no_hp);
 
         return this.request(API_ENDPOINTS.REKAP_ONLINE, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    async getRekapKomisi(id_konsumen: string | number, startDate: string, endDate: string): Promise<ApiResponse> {
+        const query = new URLSearchParams({
+            id_konsumen: String(id_konsumen),
+            start_date: startDate,
+            end_date: endDate,
+        });
+
+        return this.request(`${API_ENDPOINTS.REKAP_KOMISI}?${query.toString()}`, {
+            method: 'GET',
+        });
+    }
+
+    async getRekapKomisiDetail(id_konsumen: string | number, startDate: string, endDate: string): Promise<ApiResponse> {
+        const formData = new FormData();
+        formData.append('id_konsumen', String(id_konsumen));
+        formData.append('start_date', startDate);
+        formData.append('end_date', endDate);
+
+        return this.request(`${API_ENDPOINTS.REKAP_KOMISI_DETAIL}`, {
             method: 'POST',
             body: formData,
         });
@@ -432,6 +476,7 @@ class ApiService {
 
     // Create Transaksi Manual
     async createTransaksiManual(data: {
+        id_transaksi?: string | number;
         no_hp_pelanggan: string;
         no_hp_pelanggan_baru?: string;
         nama_pelanggan?: string;
@@ -450,6 +495,9 @@ class ApiService {
     }): Promise<ApiResponse> {
         const formData = new FormData();
         console.log(data);
+        if (data.id_transaksi) {
+            formData.append('id_transaksi', String(data.id_transaksi));
+        }
         formData.append('no_hp_pelanggan', data.no_hp_pelanggan);
         if (data.no_hp_pelanggan_baru) {
             formData.append('no_hp_pelanggan_baru', data.no_hp_pelanggan_baru);
@@ -475,6 +523,59 @@ class ApiService {
         }
 
         return this.request(API_ENDPOINTS.TAMBAH_TRANSAKSI_MANUAL, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
+    // Update Transaksi Manual
+    async updateTransaksiManual(data: {
+        id_transaksi?: string | number;
+        no_hp_pelanggan: string;
+        no_hp_pelanggan_baru?: string;
+        nama_pelanggan?: string;
+        nama_layanan: string;
+        alamat_penjemputan: string;
+        titik_jemput: string;
+        alamat_tujuan: string;
+        titik_antar: string;
+        biaya_antar: string;
+        nama_toko?: string;
+        agen_kurir: string;
+        tanggal_order: string;
+        no_hp: string;
+        is_favorite?: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+        console.log(data);
+        if (data.id_transaksi) {
+            formData.append('id_transaksi', String(data.id_transaksi));
+        }
+        formData.append('no_hp_pelanggan', data.no_hp_pelanggan);
+        if (data.no_hp_pelanggan_baru) {
+            formData.append('no_hp_pelanggan_baru', data.no_hp_pelanggan_baru);
+        }
+        if (data.nama_pelanggan) {
+            formData.append('nama_pelanggan', data.nama_pelanggan);
+        }
+        formData.append('nama_layanan', data.nama_layanan);
+        formData.append('alamat_penjemputan', data.alamat_penjemputan);
+        formData.append('titik_jemput', data.titik_jemput);
+        formData.append('alamat_tujuan', data.alamat_tujuan);
+        formData.append('titik_antar', data.titik_antar);
+        formData.append('biaya_antar', data.biaya_antar);
+        if (data.nama_toko) {
+            formData.append('nama_toko', data.nama_toko);
+        }
+        formData.append('agen_kurir', data.agen_kurir);
+        formData.append('tanggal_order', data.tanggal_order);
+        formData.append('btn_simpan', 'update');
+        formData.append('no_hp', data.no_hp);
+        if (data.is_favorite !== undefined) {
+            formData.append('is_favorite', data.is_favorite ? '1' : '0');
+        }
+
+        return this.request(API_ENDPOINTS.UPDATE_TRANSAKSI_MANUAL, {
             method: 'POST',
             body: formData,
         });

@@ -91,6 +91,9 @@ export function useDeepLinkHandler() {
       case '/add-live-order':
         router.replace('/live-order/tambah');
         break;
+      case '/member-transactions':
+        router.replace('/transaksi-member/');
+        break;
       case '/add-contact':
         router.replace('/kontak/tambah');
         break;
@@ -136,6 +139,12 @@ export function useDeepLinkHandler() {
       const id = path.split('/live-order/')[1];
       router.replace({
         pathname: '/live-order/detail',
+        params: { id: id }
+      });
+    } else if (path.startsWith('/transaksi-member/')) {
+      const id = path.split('/transaksi-member/')[1];
+      router.replace({
+        pathname: '/transaksi-member/',
         params: { id: id }
       });
     } else if (path.startsWith('/order/')) {

@@ -7,19 +7,24 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, BackHandler, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export default function TambahTransaksiScreen() {
+export default function EditTransaksiScreen() {
     const insets = useSafeAreaInsets();
-    const { selectedCustomer } = useLocalSearchParams<{ selectedCustomer?: string }>();
+    const { transaksi: transaksiParam } = useLocalSearchParams<{ transaksi?: string }>();
+
+    // Parse data transaksi dari params
+    const transaksiData = transaksiParam ? (() => {
+        try { return JSON.parse(transaksiParam); } catch { return null; }
+    })() : null;
+
     const [loading, setLoading] = useState(false);
     const [tanggal, setTanggal] = useState<Date>(new Date());
     const [agenKurir, setAgenKurir] = useState<string>('');
     const [pelanggan, setPelanggan] = useState<string>('');
     const [pelangganLabel, setPelangganLabel] = useState<string>('');
     const [pelangganData, setPelangganData] = useState<any>(null);
-    // State untuk status pelanggan otomatis
     const [isOtomatis, setIsOtomatis] = useState<boolean>(false);
     const [layanan, setLayanan] = useState<string>('');
     const [alamatJemput, setAlamatJemput] = useState<string>('');
@@ -28,76 +33,97 @@ export default function TambahTransaksiScreen() {
     const [namaRestoToko, setNamaRestoToko] = useState<string>('');
     const [linkMapsPenjemputan, setLinkMapsPenjemputan] = useState<string>('');
     const [linkMapsAntar, setLinkMapsAntar] = useState<string>('');
-    
+
     // Options state
     const [agenOptions, setAgenOptions] = useState<Array<{ label: string; value: string }>>([]);
     const [pelangganOptions, setPelangganOptions] = useState<Array<{ label: string; value: string }>>([]);
     const [layananOptions, setLayananOptions] = useState<Array<{ label: string; value: string }>>([]);
-    
-    // Loading state for dropdowns
+
+    // Loading state
     const [loadingAgen, setLoadingAgen] = useState(false);
     const [loadingPelanggan, setLoadingPelanggan] = useState(false);
     const [loadingLayanan, setLoadingLayanan] = useState(false);
 
+    // Pre-fill form dari data transaksi yang ada
+    useEffect(() => {
+        if (!transaksiData) return;
+
+        // Tanggal
+        if (transaksiData.tanggal_order) {
+            const d = new Date(transaksiData.tanggal_order);
+            if (!isNaN(d.getTime())) setTanggal(d);
+        }
+
+        // Layanan
+        setLayanan(transaksiData.service || transaksiData.jenis_layanan || '');
+
+        // Alamat
+        setAlamatJemput(transaksiData.alamat_jemput || '');
+        setAlamatAntar(transaksiData.alamat_antar || '');
+        setLinkMapsPenjemputan(transaksiData.titik_jemput || '');
+        setLinkMapsAntar(transaksiData.titik_antar || '');
+
+        // Biaya
+        setBiayaAntar(String(transaksiData.tarif || ''));
+
+        // Nama resto/toko
+        setNamaRestoToko(transaksiData.pemberi_barang || transaksiData.nama_toko || '');
+
+        // Pelanggan — gunakan id_pemesan sebagai ID, no_hp_pemesan sebagai identifier
+        const pelangganId = transaksiData.id_pemesan
+            || transaksiData.id_konsumen_pemesan
+            || transaksiData.id_pelanggan
+            || transaksiData.no_hp_pemesan
+            || '';
+        const pelangganNama = transaksiData.nama_pemesan || '';
+        const pelangganNoHp = transaksiData.no_hp_pemesan || '';
+        if (pelangganNama || pelangganNoHp) {
+            const label = pelangganNama
+                ? `${pelangganNama} (${pelangganNoHp || '-'})`
+                : pelangganNoHp;
+            setPelangganLabel(label);
+            setPelanggan(pelangganId);
+            setPelangganData({
+                id_konsumen: pelangganId,
+                nama_lengkap: pelangganNama,
+                no_hp: pelangganNoHp,
+                alamat_lengkap: transaksiData.alamat_jemput || '',
+            });
+        }
+    }, [transaksiParam]);
+
+    // Fetch agen & layanan
     useEffect(() => {
         fetchAgen();
         fetchLayanan();
-        
-        // Handle selected customer from params
-        if (selectedCustomer) {
-            try {
-                const customerData = JSON.parse(selectedCustomer);
-                setPelanggan(customerData.id_konsumen);
-                setPelangganLabel(`${customerData.nama_lengkap} (${customerData.no_hp})`);
-                setPelangganData(customerData);
-            } catch (error) {
-                console.error('Error parsing selected customer:', error);
-            }
-        }
-    }, [selectedCustomer]);
+    }, []);
 
     useEffect(() => {
-        const backAction = () => {
-            router.back();
-            return true;
-        };
-
+        const backAction = () => { router.back(); return true; };
         const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-
         return () => backHandler.remove();
     }, []);
+
+    // Setelah agenOptions loaded, set agen dari data transaksi
+    useEffect(() => {
+        if (agenOptions.length > 0 && transaksiData?.id_agen) {
+            setAgenKurir(transaksiData.id_agen);
+        }
+    }, [agenOptions]);
 
     const fetchAgen = async () => {
         try {
             setLoadingAgen(true);
             const userData = await AsyncStorage.getItem('userData');
-            if (!userData) {
-                console.error('No user data found');
-                return;
-            }
-            
-
+            if (!userData) return;
             const user = JSON.parse(userData);
             const response = await apiService.getListAgent(user.no_hp);
-
-
-            if (response.success && response.data && response.data.data) {
-                const agentData = response.data.data;
-                // Check if data is array
-                if (Array.isArray(agentData)) {
-                    const options = agentData.map((item: any) => ({
-                        label: item.nama_lengkap+' ('+item.kota+')',
-                        value: item.id_konsumen,
-                    }));
-                    setAgenOptions(options);
-                    // Otomatis pilih agen jika id_konsumen sama dengan user
-                    const foundAgen = agentData.find((item: any) => item.id_konsumen === user.id_konsumen);
-                    if (foundAgen) {
-                        setAgenKurir(foundAgen.id_konsumen);
-                    }
-                } else {
-                    console.error('Agent data is not an array:', agentData);
-                }
+            if (response.success && response.data?.data && Array.isArray(response.data.data)) {
+                const options = response.data.data.map((item: any) => ({
+                    label: `${item.nama_lengkap} (${item.kota})`,
+                    value: item.id_konsumen,
+                }));
+                setAgenOptions(options);
             }
         } catch (error) {
             console.error('Error fetching agen:', error);
@@ -106,34 +132,39 @@ export default function TambahTransaksiScreen() {
         }
     };
 
+    const fetchLayanan = async () => {
+        try {
+            setLoadingLayanan(true);
+            const response = await apiService.getJenisLayanan();
+            if (response.success && response.data?.data) {
+                const dataArray = Object.values(response.data.data) as any[];
+                setLayananOptions(dataArray.map((item: any) => ({
+                    label: item.name,
+                    value: item.key,
+                })));
+            }
+        } catch (error) {
+            console.error('Error fetching layanan:', error);
+        } finally {
+            setLoadingLayanan(false);
+        }
+    };
+
     const handleSearchPelanggan = async (query: string) => {
         try {
             setLoadingPelanggan(true);
             setPelangganOptions([]);
-            
             const userData = await AsyncStorage.getItem('userData');
-            if (!userData) {
-                console.error('No user data found');
-                return;
-            }
-
+            if (!userData) return;
             const user = JSON.parse(userData);
             const response = await apiService.getListPelanggan(user.no_hp, query);
-            
-            if (response.success && response.data && response.data.data) {
-                const pelangganData = response.data.data;
-                
-                if (Array.isArray(pelangganData)) {
-                    const options = pelangganData.map((item: any) => ({
-                        label: item.nama_lengkap + ' (' + item.no_hp + ')',
-                        value: item.id_konsumen || item.id,
-                        data: item, // Store full data
-                    }));
-                    console.log('Pelanggan options:', options);
-                    setPelangganOptions(options);
-                } else {
-                    console.error('Pelanggan data is not an array:', pelangganData);
-                }
+            if (response.success && response.data?.data && Array.isArray(response.data.data)) {
+                const options = response.data.data.map((item: any) => ({
+                    label: `${item.nama_lengkap} (${item.no_hp})`,
+                    value: item.id_konsumen || item.id,
+                    data: item,
+                }));
+                setPelangganOptions(options);
             }
         } catch (error) {
             console.error('Error searching pelanggan:', error);
@@ -142,36 +173,28 @@ export default function TambahTransaksiScreen() {
         }
     };
 
-    // Handler untuk pelanggan, menerima value dan label
-    const handlePelangganChange = (value: string, label: string, data?: { id_konsumen: string, nama_lengkap: string, no_hp: string, alamat_lengkap?: string, is_favorite?: boolean, is_favorite_list?: boolean }) => {
-        console.log('Pelanggan changed:', data);
+    const handlePelangganChange = (value: string, label: string, data?: any) => {
         setPelanggan(value);
         setPelangganLabel(label);
-        let otomatis = false;
         if (data) {
             setPelangganData(data);
-            // Pelanggan otomatis jika berasal dari daftar favorite (is_favorite_list true)
-            otomatis = !!data.is_favorite_list;
+            setIsOtomatis(!!data.is_favorite_list);
         } else {
-            // Cari data pelanggan dari options jika ada
             const selected = pelangganOptions.find(opt => opt.value === value);
             if (selected) {
                 setPelangganData((selected as any).data);
-                otomatis = !!((selected as any).data?.is_favorite_list);
+                setIsOtomatis(!!((selected as any).data?.is_favorite_list));
             } else {
-                // Jika tidak ada data, fallback parsing label
-                let nama = label;
-                let no_hp = '';
                 const match = label.match(/^(.*)\s*\(([^)]+)\)$/);
-                if (match) {
-                    nama = match[1].trim();
-                    no_hp = match[2].trim();
-                }
-                setPelangganData({ id_konsumen: value, nama_lengkap: nama, no_hp, alamat_lengkap: '' });
-                otomatis = false;
+                setPelangganData({
+                    id_konsumen: value,
+                    nama_lengkap: match ? match[1].trim() : label,
+                    no_hp: match ? match[2].trim() : '',
+                    alamat_lengkap: '',
+                });
+                setIsOtomatis(false);
             }
         }
-        setIsOtomatis(otomatis);
     };
 
     const handleClearPelangganResults = () => {
@@ -181,73 +204,31 @@ export default function TambahTransaksiScreen() {
         setPelangganData(null);
     };
 
-    const fetchLayanan = async () => {
-        try {
-            setLoadingLayanan(true);
-            const response = await apiService.getJenisLayanan();
-            
-            if (response.success && response.data && response.data.data) {
-                const servicesData = response.data.data;
-                const dataArray = Object.values(servicesData) as any[];
-                
-                const options = dataArray.map((item: any) => ({
-                    label: item.name,
-                    value: item.key,
-                }));
-                
-                setLayananOptions(options);
-            }
-        } catch (error) {
-            console.error('Error fetching layanan:', error);
-        } finally {
-            setLoadingLayanan(false);
-        }
-    };
-
-    const formatDate = (date: Date): string => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
     const formatDateTime = (date: Date): string => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     };
 
     const handleSubmit = async () => {
-        // Validation
-        if (!tanggal || !agenKurir || (!selectedCustomer && !pelanggan) || !layanan || !alamatJemput || !alamatAntar || !biayaAntar) {
-            alert('Mohon lengkapi semua field yang wajib diisi');
+        const isPelangganValid = !!(pelanggan || pelangganData?.no_hp || pelangganLabel);
+        if (!tanggal || !agenKurir || !isPelangganValid || !layanan || !alamatJemput || !alamatAntar || !biayaAntar) {
+            Alert.alert('Perhatian', 'Mohon lengkapi semua field yang wajib diisi');
             return;
         }
-
-        // Validation for Food and Shop
         if ((layanan === 'FOOD' || layanan === 'SHOP') && !namaRestoToko) {
-            alert(`Mohon isi nama ${layanan === 'FOOD' ? 'restoran' : 'toko'}`);
+            Alert.alert('Perhatian', `Mohon isi nama ${layanan === 'FOOD' ? 'restoran' : 'toko'}`);
             return;
         }
 
         try {
             setLoading(true);
-            
             const userData = await AsyncStorage.getItem('userData');
-            if (!userData) {
-                alert('Data user tidak ditemukan');
-                return;
-            }
-
+            if (!userData) { Alert.alert('Error', 'Data user tidak ditemukan'); return; }
             const user = JSON.parse(userData);
-            
-            // Prepare data
+
             const requestData: any = {
-                no_hp_pelanggan: pelangganData?.no_hp || '-',
+                id_transaksi: transaksiData?.id || transaksiData?.id_transaksi,
+                no_hp_pelanggan: pelangganData?.no_hp || transaksiData?.no_hp_pemesan || '-',
                 nama_layanan: layanan,
                 alamat_penjemputan: alamatJemput,
                 titik_jemput: linkMapsPenjemputan,
@@ -256,34 +237,34 @@ export default function TambahTransaksiScreen() {
                 biaya_antar: biayaAntar,
                 agen_kurir: agenKurir,
                 tanggal_order: formatDateTime(tanggal),
-                btn_simpan: 'create',
                 no_hp: user.no_hp || '',
                 is_favorite: isOtomatis,
             };
 
-            // If pelanggan baru (no_hp = '-')
-            if (!pelangganData || !pelangganData.no_hp) {
+            if (!pelangganData?.no_hp && !transaksiData?.no_hp_pemesan) {
                 requestData.no_hp_pelanggan = '-';
-                requestData.no_hp_pelanggan_baru = ''; // Bisa ditambahkan input untuk pelanggan baru
-                requestData.nama_pelanggan = pelangganLabel || '';
             }
-
-            // Add nama_toko for FOOD/SHOP
+            if (pelangganLabel || transaksiData?.nama_pemesan) {
+                requestData.nama_pelanggan = pelangganData?.nama_lengkap || pelangganLabel || transaksiData?.nama_pemesan || '';
+            }
             if (layanan === 'FOOD' || layanan === 'SHOP') {
                 requestData.nama_toko = namaRestoToko;
             }
 
-            const response = await apiService.createTransaksiManual(requestData);
-            
+            console.log('[EDIT] requestData dikirim:', JSON.stringify(requestData, null, 2));
+            const response = await apiService.updateTransaksiManual(requestData);
+            console.log('[EDIT] response:', JSON.stringify(response, null, 2));
+
             if (response.success) {
-                alert('Transaksi berhasil disimpan!');
-                router.back();
+                Alert.alert('Berhasil', 'Transaksi berhasil diperbarui', [
+                    { text: 'OK', onPress: () => router.back() }
+                ]);
             } else {
-                alert(response.message || 'Gagal menyimpan transaksi');
+                Alert.alert('Error', response.message || 'Gagal memperbarui transaksi');
             }
         } catch (error) {
-            console.error('Error submitting transaksi:', error);
-            alert('Terjadi kesalahan saat menyimpan transaksi');
+            console.error('Error updating transaksi:', error);
+            Alert.alert('Error', 'Terjadi kesalahan saat memperbarui transaksi');
         } finally {
             setLoading(false);
         }
@@ -292,28 +273,31 @@ export default function TambahTransaksiScreen() {
     return (
         <View style={styles.container}>
             <GlassBackground />
+
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity 
-                    style={styles.backButton}
-                    onPress={() => router.back()}
-                >
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color="#ffffff" />
                 </TouchableOpacity>
-                
-                <Text style={styles.headerTitle}>Tambah Transaksi</Text>
-                
+                <Text style={styles.headerTitle}>Edit Transaksi</Text>
                 <View style={styles.headerRight} />
             </View>
 
-            {/* Content */}
-            <ScrollView 
+            {/* Info kode order */}
+            {transaksiData?.kode_order && (
+                <View style={styles.orderBadge}>
+                    <Ionicons name="receipt-outline" size={14} color="#0097A7" />
+                    <Text style={styles.orderBadgeText}>#{transaksiData.kode_order}</Text>
+                </View>
+            )}
+
+            <ScrollView
                 style={styles.content}
                 contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 120 }}
             >
                 <View style={styles.formSection}>
-                    <Text style={styles.sectionTitle}>Form Pasca Order</Text>
-                    
+                    <Text style={styles.sectionTitle}>Edit Pasca Order</Text>
+
                     {/* Tanggal */}
                     <DatePickerInput
                         label="Tanggal"
@@ -337,50 +321,33 @@ export default function TambahTransaksiScreen() {
                             placeholder="Pilih agen kurir"
                         />
                     )}
-                    
-                    {/* Pelanggan */}
-                    {selectedCustomer ? (
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.inputLabel}>Pelanggan</Text>
-                            <View style={styles.selectedCustomerContainer}>
-                                <Ionicons name="person" size={20} color="#0097A7" />
-                                <View style={styles.selectedCustomerInfo}>
-                                    <Text style={styles.selectedCustomerName}>{pelangganLabel}</Text>
-                                    <Text style={styles.selectedCustomerNote}>Pelanggan sudah dipilih</Text>
-                                </View>
-                            </View>
-                        </View>
-                    ) : (
-                        <>
-                        <PelangganSearchInput
-                            label="Pelanggan"
-                            value={pelanggan}
-                            onChange={handlePelangganChange}
-                            onSearch={handleSearchPelanggan}
-                            onClearResults={handleClearPelangganResults}
-                            options={pelangganOptions}
-                            placeholder="Cari pelanggan"
-                            searchPlaceholder="Masukkan no HP atau nama"
-                            selectedLabel={pelangganLabel}
-                            isSearching={loadingPelanggan}
-                        />
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                            <TouchableOpacity
-                                style={{ marginRight: 8 }}
-                                onPress={() => setIsOtomatis(!isOtomatis)}
-                            >
-                                <Ionicons
-                                    name={isOtomatis ? 'checkbox' : 'square-outline'}
-                                    size={20}
-                                    color={isOtomatis ? '#0097A7' : '#adb5bd'}
-                                />
-                            </TouchableOpacity>
-                            <Text style={styles.selectedCustomerNote}>Pelanggan Favorite</Text>
-                        </View>
-                        </>
-                    )}
 
-                    
+                    {/* Pelanggan */}
+                    <PelangganSearchInput
+                        label="Pelanggan"
+                        value={pelanggan}
+                        onChange={handlePelangganChange}
+                        onSearch={handleSearchPelanggan}
+                        onClearResults={handleClearPelangganResults}
+                        options={pelangganOptions}
+                        placeholder="Cari pelanggan"
+                        searchPlaceholder="Masukkan no HP atau nama"
+                        selectedLabel={pelangganLabel}
+                        isSearching={loadingPelanggan}
+                    />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <TouchableOpacity
+                            style={{ marginRight: 8 }}
+                            onPress={() => setIsOtomatis(!isOtomatis)}
+                        >
+                            <Ionicons
+                                name={isOtomatis ? 'checkbox' : 'square-outline'}
+                                size={20}
+                                color={isOtomatis ? '#0097A7' : '#adb5bd'}
+                            />
+                        </TouchableOpacity>
+                        <Text style={styles.selectedCustomerNote}>Pelanggan Favorite</Text>
+                    </View>
 
                     {/* Layanan */}
                     <View style={styles.inputContainer}>
@@ -397,25 +364,24 @@ export default function TambahTransaksiScreen() {
                                         key={option.value}
                                         style={[
                                             styles.layananButton,
-                                            layanan === option.value && styles.layananButtonActive
+                                            layanan === option.value && styles.layananButtonActive,
                                         ]}
                                         onPress={() => setLayanan(option.value)}
                                         activeOpacity={0.7}
                                     >
-                                        <Ionicons 
+                                        <Ionicons
                                             name={
                                                 option.value === 'RIDE' ? 'bicycle' :
                                                 option.value === 'SEND' ? 'cube' :
                                                 option.value === 'FOOD' ? 'restaurant' :
-                                                option.value === 'SHOP' ? 'cart' :
-                                                'ellipse'
-                                            } 
-                                            size={24} 
-                                            color={layanan === option.value ? '#ffffff' : '#0097A7'} 
+                                                option.value === 'SHOP' ? 'cart' : 'ellipse'
+                                            }
+                                            size={24}
+                                            color={layanan === option.value ? '#ffffff' : '#0097A7'}
                                         />
                                         <Text style={[
                                             styles.layananButtonText,
-                                            layanan === option.value && styles.layananButtonTextActive
+                                            layanan === option.value && styles.layananButtonTextActive,
                                         ]}>
                                             {option.label}
                                         </Text>
@@ -425,7 +391,7 @@ export default function TambahTransaksiScreen() {
                         )}
                     </View>
 
-                    {/* Nama Resto/Toko - Only show for FOOD or SHOP */}
+                    {/* Nama Resto/Toko */}
                     {(layanan === 'FOOD' || layanan === 'SHOP') && (
                         <View style={styles.inputContainer}>
                             <Text style={styles.inputLabel}>
@@ -449,10 +415,7 @@ export default function TambahTransaksiScreen() {
                                 style={styles.fillAddressButton}
                                 onPress={() => {
                                     const alamat = pelangganData?.alamat_lengkap || pelangganData?.alamat || '';
-                                    if (!alamat) {
-                                        alert('Alamat pelanggan tidak tersedia');
-                                        return;
-                                    }
+                                    if (!alamat) { Alert.alert('Info', 'Alamat pelanggan tidak tersedia'); return; }
                                     setAlamatJemput(alamat);
                                 }}
                             >
@@ -496,10 +459,7 @@ export default function TambahTransaksiScreen() {
                                 style={styles.fillAddressButton}
                                 onPress={() => {
                                     const alamat = pelangganData?.alamat_lengkap || pelangganData?.alamat || '';
-                                    if (!alamat) {
-                                        alert('Alamat pelanggan tidak tersedia');
-                                        return;
-                                    }
+                                    if (!alamat) { Alert.alert('Info', 'Alamat pelanggan tidak tersedia'); return; }
                                     setAlamatAntar(alamat);
                                 }}
                             >
@@ -518,6 +478,7 @@ export default function TambahTransaksiScreen() {
                         />
                     </View>
 
+                    {/* Link Maps Antar */}
                     <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>Link Maps Antar</Text>
                         <View style={styles.priceInputContainer}>
@@ -542,11 +503,7 @@ export default function TambahTransaksiScreen() {
                             <TextInput
                                 style={styles.priceInput}
                                 value={biayaAntar}
-                                onChangeText={(text) => {
-                                    // Only allow numbers
-                                    const numericValue = text.replace(/[^0-9]/g, '');
-                                    setBiayaAntar(numericValue);
-                                }}
+                                onChangeText={(text) => setBiayaAntar(text.replace(/[^0-9]/g, ''))}
                                 placeholder="0"
                                 placeholderTextColor="#adb5bd"
                                 keyboardType="numeric"
@@ -555,18 +512,18 @@ export default function TambahTransaksiScreen() {
                     </View>
                 </View>
 
-                {/* Submit Button */}
-                <TouchableOpacity 
+                {/* Submit */}
+                <TouchableOpacity
                     style={[styles.submitButton, loading && styles.submitButtonDisabled]}
                     onPress={handleSubmit}
                     disabled={loading}
                 >
                     {loading ? (
-                        <Text style={styles.submitButtonText}>Menyimpan...</Text>
+                        <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
                         <>
-                            <Text style={styles.submitButtonText}>Simpan Transaksi</Text>
                             <Ionicons name="checkmark-circle-outline" size={20} color="#ffffff" />
+                            <Text style={styles.submitButtonText}>Simpan Perubahan</Text>
                         </>
                     )}
                 </TouchableOpacity>
@@ -578,12 +535,8 @@ export default function TambahTransaksiScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        // backgroundColor: '#f8f9fa',
-    },
+    container: { flex: 1 },
     header: {
-        // backgroundColor: '#0097A7',
         paddingTop: 50,
         paddingBottom: 16,
         paddingHorizontal: 16,
@@ -591,9 +544,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
-    backButton: {
-        padding: 4,
-    },
+    backButton: { padding: 4 },
     headerTitle: {
         fontSize: 20,
         fontWeight: 'bold',
@@ -601,13 +552,26 @@ const styles = StyleSheet.create({
         flex: 1,
         textAlign: 'center',
     },
-    headerRight: {
-        width: 32,
+    headerRight: { width: 32 },
+    orderBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'center',
+        gap: 6,
+        backgroundColor: '#e7f3ff',
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        marginBottom: 4,
+        borderWidth: 1,
+        borderColor: '#0097A7',
     },
-    content: {
-        flex: 1,
-        padding: 16,
+    orderBadgeText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#0097A7',
     },
+    content: { flex: 1, padding: 16 },
     formSection: {
         backgroundColor: '#ffffff',
         borderRadius: 12,
@@ -625,17 +589,6 @@ const styles = StyleSheet.create({
         color: '#212529',
         marginBottom: 16,
     },
-    placeholder: {
-        padding: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    placeholderText: {
-        fontSize: 14,
-        color: '#6c757d',
-        textAlign: 'center',
-        marginTop: 16,
-    },
     loadingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -646,13 +599,8 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         gap: 8,
     },
-    loadingText: {
-        fontSize: 14,
-        color: '#6c757d',
-    },
-    inputContainer: {
-        marginBottom: 16,
-    },
+    loadingText: { fontSize: 14, color: '#6c757d' },
+    inputContainer: { marginBottom: 16 },
     inputLabel: {
         fontSize: 14,
         fontWeight: '600',
@@ -689,10 +637,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#212529',
     },
-    textArea: {
-        minHeight: 80,
-        paddingTop: 12,
-    },
+    textArea: { minHeight: 80, paddingTop: 12 },
     priceInputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -747,51 +692,27 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#0097A7',
     },
-    layananButtonTextActive: {
-        color: '#ffffff',
-    },
+    layananButtonTextActive: { color: '#ffffff' },
     submitButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#0097A7',
+        backgroundColor: '#f59e0b',
         borderRadius: 12,
         paddingVertical: 16,
         paddingHorizontal: 24,
         gap: 8,
-        shadowColor: '#000',
+        shadowColor: '#f59e0b',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 4,
         elevation: 3,
     },
-    submitButtonDisabled: {
-        backgroundColor: '#6c757d',
-        opacity: 0.6,
-    },
+    submitButtonDisabled: { opacity: 0.6 },
     submitButtonText: {
         fontSize: 16,
         fontWeight: 'bold',
         color: '#ffffff',
-    },
-    selectedCustomerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#e7f3ff',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#0097A7',
-        paddingHorizontal: 12,
-        paddingVertical: 12,
-        gap: 12,
-    },
-    selectedCustomerInfo: {
-        flex: 1,
-    },
-    selectedCustomerName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#212529',
     },
     selectedCustomerNote: {
         fontSize: 12,
