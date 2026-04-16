@@ -37,6 +37,7 @@ export const API_ENDPOINTS = {
     LIST_PELANGGAN: `${API_BASE_URL}/kurir/v1/list-pelanggan`,
     TAMBAH_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/transaksi-manual/save`,
     UPDATE_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/transaksi-manual/update`,
+    CANCEL_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/transaksi-manual/cancel`,
     APPROVE_TRANSAKSI_MANUAL: `${API_BASE_URL}/kurir/v1/approve-transaksi-manual`,
     CEK_NO_HP_REGISTRATION: `${API_BASE_URL}/kurir/register/cek-no-hp`,
     GET_PROVINSI: `${API_BASE_URL}/kurir/register/get-provinsi`,

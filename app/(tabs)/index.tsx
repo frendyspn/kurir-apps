@@ -49,6 +49,9 @@ function HomeScreen() {
         komisiToday: 0,
         komisiMonth: 0,
         komisiAllDates: 0,
+        potonganOngkirToday: 0,
+        potonganOngkirMonth: 0,
+        potonganOngkirAllDates: 0,
         pelangganBaruToday: 0,
         pelangganBaruMonth: 0,
         pelangganBaruAllDates: 0,
@@ -202,7 +205,7 @@ function HomeScreen() {
                 // Fetch balance after getting user data
                 await fetchBalance(parsedData.no_hp);
                 await fetchPendapatan(parsedData.no_hp);
-                await fetchStatsSummary(parsedData.no_hp, selectedFilter);
+                await fetchStatsSummary(parsedData.no_hp, selectedFilter, parsedData.id_konsumen);
                 await fetchUnreadNotifCount(parsedData.id_konsumen);
             } else {
                 console.log('❌ NO USER DATA FOUND IN ASYNCSTORAGE');
@@ -503,11 +506,152 @@ function HomeScreen() {
         return 0;
     }, [parseDurationStringToMinutes, toNumber]);
 
-    const fetchStatsSummary = useCallback(async (phoneNumber: string, type: string = 'semua') => {
+    const normalizePotonganValue = useCallback((value: number): number => {
+        return value < 0 ? Math.abs(value) : value;
+    }, []);
+
+    const getPotonganOngkirFromRekapKomisi = useCallback((payload: any): number => {
+        const summaryCandidates = [
+            payload?.data?.summary,
+            payload?.summary,
+            payload?.data?.data?.summary,
+        ];
+
+        for (const summary of summaryCandidates) {
+            if (!summary || typeof summary !== 'object') continue;
+            const totalDebit = toNumber(summary?.total_debit ?? summary?.debit_total ?? summary?.debit);
+            const totalCredit = toNumber(summary?.total_credit ?? summary?.credit_total ?? summary?.credit);
+            if (totalDebit !== 0 || totalCredit !== 0) {
+                return normalizePotonganValue(totalDebit - totalCredit);
+            }
+        }
+
+        const arrayCandidates = [
+            payload?.data?.data,
+            payload?.data,
+            payload,
+        ];
+
+        let rows: any[] = [];
+        for (const candidate of arrayCandidates) {
+            if (Array.isArray(candidate)) {
+                rows = candidate;
+                break;
+            }
+        }
+
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return 0;
+        }
+
+        const komisiRow = rows.find((row: any) => {
+            const typeText = String(row?.type ?? row?.jenis ?? row?.kategori ?? '').toUpperCase();
+            return typeText === 'KOMISI' || typeText.includes('KOMISI');
+        });
+        if (komisiRow) {
+            const debitCandidates = [
+                komisiRow?.total_debit,
+                komisiRow?.debit_total,
+                komisiRow?.debit,
+                komisiRow?.sum_debit,
+                komisiRow?.amount_debit,
+            ];
+            const creditCandidates = [
+                komisiRow?.total_credit,
+                komisiRow?.credit_total,
+                komisiRow?.credit,
+                komisiRow?.sum_credit,
+                komisiRow?.amount_credit,
+            ];
+
+            const debit = debitCandidates.reduce((acc: number, value: any) => {
+                const parsed = toNumber(value);
+                return parsed > 0 ? parsed : acc;
+            }, 0);
+            const credit = creditCandidates.reduce((acc: number, value: any) => {
+                const parsed = toNumber(value);
+                return parsed > 0 ? parsed : acc;
+            }, 0);
+
+            if (debit > 0 || credit > 0) {
+                return normalizePotonganValue(debit - credit);
+            }
+
+            const netCandidates = [
+                komisiRow?.net_amount,
+                komisiRow?.net,
+                komisiRow?.amount,
+            ];
+
+            for (const candidate of netCandidates) {
+                const parsed = toNumber(candidate);
+                if (parsed !== 0) {
+                    return normalizePotonganValue(parsed);
+                }
+            }
+        }
+
+        // Fallback: akumulasi langsung dari row trx_type jika tersedia
+        const result = rows.reduce((sum: number, row: any) => {
+            const typeText = String(row?.type ?? row?.jenis ?? row?.kategori ?? '').toUpperCase();
+            const isKomisiType = typeText === 'KOMISI' || typeText.includes('KOMISI');
+            if (!isKomisiType) {
+                return sum;
+            }
+            const amount = toNumber(row?.amount ?? row?.nominal ?? row?.value);
+            const trxType = String(row?.trx_type ?? row?.tipe ?? '').toLowerCase();
+            if (trxType === 'debit') return sum + amount;
+            if (trxType === 'credit') return sum - amount;
+            return sum;
+        }, 0);
+        return normalizePotonganValue(result);
+    }, [normalizePotonganValue, toNumber]);
+
+    const getPotonganOngkirFromRekapKomisiDetail = useCallback((payload: any): number => {
+        const detailCandidates = [
+            payload?.data?.detail,
+            payload?.detail,
+            payload?.data?.data?.detail,
+            payload?.data?.data,
+            payload?.data,
+        ];
+
+        let rows: any[] = [];
+        for (const candidate of detailCandidates) {
+            if (Array.isArray(candidate)) {
+                rows = candidate;
+                break;
+            }
+        }
+
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return 0;
+        }
+
+        const result = rows.reduce((sum: number, row: any) => {
+            const typeText = String(row?.type ?? row?.jenis ?? row?.kategori ?? '').toUpperCase();
+            const isKomisiType = typeText === 'KOMISI' || typeText.includes('KOMISI');
+            if (!isKomisiType) {
+                return sum;
+            }
+
+            const trxType = String(row?.trx_type ?? row?.tipe ?? '').toLowerCase();
+            const amount = toNumber(row?.amount ?? row?.nominal ?? row?.value);
+
+            if (trxType === 'debit') return sum + amount;
+            if (trxType === 'credit') return sum - amount;
+            return sum;
+        }, 0);
+        return normalizePotonganValue(result);
+    }, [normalizePotonganValue, toNumber]);
+
+    const fetchStatsSummary = useCallback(async (phoneNumber: string, type: string = 'semua', idKonsumen?: string | number) => {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         const yearStr = today.getFullYear().toString();
         const monthStr = String(today.getMonth() + 1).padStart(2, '0');
+        const monthStartStr = `${yearStr}-${monthStr}-01`;
+        const allStartDate = '2000-01-01';
 
         const emptySummary = {
             pesananToday: 0,
@@ -522,6 +666,9 @@ function HomeScreen() {
             komisiToday: 0,
             komisiMonth: 0,
             komisiAllDates: 0,
+            potonganOngkirToday: 0,
+            potonganOngkirMonth: 0,
+            potonganOngkirAllDates: 0,
             pelangganBaruToday: 0,
             pelangganBaruMonth: 0,
             pelangganBaruAllDates: 0,
@@ -529,6 +676,8 @@ function HomeScreen() {
             waktuOnlineMinutesMonth: 0,
             waktuOnlineMinutesAllDates: 0,
         };
+
+        let baseSummary = { ...emptySummary };
 
         try {
             const statistikRes = await apiService.getStatistikRingkas(phoneNumber, type);
@@ -548,6 +697,9 @@ function HomeScreen() {
                     komisiToday: toNumber(summaryData.komisiToday ?? summaryData.komisi_today),
                     komisiMonth: toNumber(summaryData.komisiMonth ?? summaryData.komisi_month),
                     komisiAllDates: toNumber(summaryData.komisiAllDates ?? summaryData.komisi_total),
+                    potonganOngkirToday: 0,
+                    potonganOngkirMonth: 0,
+                    potonganOngkirAllDates: 0,
                     pelangganBaruToday: Math.round(toNumber(summaryData.pelangganBaruToday ?? summaryData.pelangganToday ?? summaryData.pelanggan_today)),
                     pelangganBaruMonth: Math.round(toNumber(summaryData.pelangganBaruMonth ?? summaryData.pelangganMonth ?? summaryData.pelanggan_month)),
                     pelangganBaruAllDates: Math.round(toNumber(summaryData.pelangganBaruAllDates ?? summaryData.pelangganAllDates ?? summaryData.pelanggan_total)),
@@ -558,8 +710,7 @@ function HomeScreen() {
 
                 const hasStatValue = Object.values(mappedSummary).some(value => value > 0);
                 if (hasStatValue) {
-                    setStatsSummary(mappedSummary);
-                    return;
+                    baseSummary = mappedSummary;
                 }
             }
         } catch (error) {
@@ -567,50 +718,154 @@ function HomeScreen() {
         }
 
         try {
-            const [dailySettle, monthlySettle, allSettle] = await Promise.allSettled([
-                apiService.getPendapatanDaily(phoneNumber, todayStr, type),
-                apiService.getPendapatanMonthly(phoneNumber, yearStr, monthStr, type),
-                apiService.getPendapatanCustom(phoneNumber, '2000-01-01', todayStr, type),
-            ]);
+            const hasBaseValue = Object.values(baseSummary).some(value => value > 0);
+            if (!hasBaseValue) {
+                const [dailySettle, monthlySettle, allSettle] = await Promise.allSettled([
+                    apiService.getPendapatanDaily(phoneNumber, todayStr, type),
+                    apiService.getPendapatanMonthly(phoneNumber, yearStr, monthStr, type),
+                    apiService.getPendapatanCustom(phoneNumber, allStartDate, todayStr, type),
+                ]);
 
-            const dailyRes = dailySettle.status === 'fulfilled' ? dailySettle.value : null;
-            const monthlyRes = monthlySettle.status === 'fulfilled' ? monthlySettle.value : null;
-            const allRes = allSettle.status === 'fulfilled' ? allSettle.value : null;
-            const todayOnlineMinutes = dailyRes?.success ? getOnlineMinutesFromPayload(dailyRes) : 0;
-            const monthOnlineMinutes = monthlyRes?.success ? getOnlineMinutesFromPayload(monthlyRes) : 0;
-            const allOnlineMinutes = allRes?.success ? getOnlineMinutesFromPayload(allRes) : 0;
+                const dailyRes = dailySettle.status === 'fulfilled' ? dailySettle.value : null;
+                const monthlyRes = monthlySettle.status === 'fulfilled' ? monthlySettle.value : null;
+                const allRes = allSettle.status === 'fulfilled' ? allSettle.value : null;
+                const todayOnlineMinutes = dailyRes?.success ? getOnlineMinutesFromPayload(dailyRes) : 0;
+                const monthOnlineMinutes = monthlyRes?.success ? getOnlineMinutesFromPayload(monthlyRes) : 0;
+                const allOnlineMinutes = allRes?.success ? getOnlineMinutesFromPayload(allRes) : 0;
 
-            setStatsSummary({
-                pesananToday: dailyRes?.success ? getOrderCountFromPayload(dailyRes) : 0,
-                pesananMonth: monthlyRes?.success ? getOrderCountFromPayload(monthlyRes) : 0,
-                pesananAllDates: allRes?.success ? getOrderCountFromPayload(allRes) : 0,
-                omsetToday: dailyRes?.success ? getPendapatanFromPayload(dailyRes) : 0,
-                omsetMonth: monthlyRes?.success ? getPendapatanFromPayload(monthlyRes) : 0,
-                omsetAllDates: allRes?.success ? getPendapatanFromPayload(allRes) : 0,
-                pendapatanToday: dailyRes?.success ? getPendapatanBersihFromPayload(dailyRes) : 0,
-                pendapatanMonth: monthlyRes?.success ? getPendapatanBersihFromPayload(monthlyRes) : 0,
-                pendapatanAllDates: allRes?.success ? getPendapatanBersihFromPayload(allRes) : 0,
-                komisiToday: dailyRes?.success ? getKomisiFromPayload(dailyRes) : 0,
-                komisiMonth: monthlyRes?.success ? getKomisiFromPayload(monthlyRes) : 0,
-                komisiAllDates: allRes?.success ? getKomisiFromPayload(allRes) : 0,
-                pelangganBaruToday: dailyRes?.success ? getPelangganBaruFromPayload(dailyRes) : 0,
-                pelangganBaruMonth: monthlyRes?.success ? getPelangganBaruFromPayload(monthlyRes) : 0,
-                pelangganBaruAllDates: allRes?.success ? getPelangganBaruFromPayload(allRes) : 0,
-                waktuOnlineMinutesToday: todayOnlineMinutes,
-                waktuOnlineMinutesMonth: monthOnlineMinutes,
-                waktuOnlineMinutesAllDates: allOnlineMinutes,
+                baseSummary = {
+                    pesananToday: dailyRes?.success ? getOrderCountFromPayload(dailyRes) : 0,
+                    pesananMonth: monthlyRes?.success ? getOrderCountFromPayload(monthlyRes) : 0,
+                    pesananAllDates: allRes?.success ? getOrderCountFromPayload(allRes) : 0,
+                    omsetToday: dailyRes?.success ? getPendapatanFromPayload(dailyRes) : 0,
+                    omsetMonth: monthlyRes?.success ? getPendapatanFromPayload(monthlyRes) : 0,
+                    omsetAllDates: allRes?.success ? getPendapatanFromPayload(allRes) : 0,
+                    pendapatanToday: dailyRes?.success ? getPendapatanBersihFromPayload(dailyRes) : 0,
+                    pendapatanMonth: monthlyRes?.success ? getPendapatanBersihFromPayload(monthlyRes) : 0,
+                    pendapatanAllDates: allRes?.success ? getPendapatanBersihFromPayload(allRes) : 0,
+                    komisiToday: dailyRes?.success ? getKomisiFromPayload(dailyRes) : 0,
+                    komisiMonth: monthlyRes?.success ? getKomisiFromPayload(monthlyRes) : 0,
+                    komisiAllDates: allRes?.success ? getKomisiFromPayload(allRes) : 0,
+                    potonganOngkirToday: 0,
+                    potonganOngkirMonth: 0,
+                    potonganOngkirAllDates: 0,
+                    pelangganBaruToday: dailyRes?.success ? getPelangganBaruFromPayload(dailyRes) : 0,
+                    pelangganBaruMonth: monthlyRes?.success ? getPelangganBaruFromPayload(monthlyRes) : 0,
+                    pelangganBaruAllDates: allRes?.success ? getPelangganBaruFromPayload(allRes) : 0,
+                    waktuOnlineMinutesToday: todayOnlineMinutes,
+                    waktuOnlineMinutesMonth: monthOnlineMinutes,
+                    waktuOnlineMinutesAllDates: allOnlineMinutes,
+                };
+            }
+
+            const konsumenId = String(idKonsumen ?? userData?.id_konsumen ?? '').trim();
+            console.log('[PotonganOngkir][debug] input', {
+                phoneNumber,
+                type,
+                konsumenId,
+                todayStr,
+                monthStartStr,
+                allStartDate,
             });
+
+            if (konsumenId) {
+                const [rekapTodaySettle, rekapMonthSettle, rekapAllSettle] = await Promise.allSettled([
+                    apiService.getRekapKomisi(konsumenId, todayStr, todayStr),
+                    apiService.getRekapKomisi(konsumenId, monthStartStr, todayStr),
+                    apiService.getRekapKomisi(konsumenId, allStartDate, todayStr),
+                ]);
+
+                const rekapToday = rekapTodaySettle.status === 'fulfilled' ? rekapTodaySettle.value : null;
+                const rekapMonth = rekapMonthSettle.status === 'fulfilled' ? rekapMonthSettle.value : null;
+                const rekapAll = rekapAllSettle.status === 'fulfilled' ? rekapAllSettle.value : null;
+
+                console.log('[PotonganOngkir][debug] rekapToday', {
+                    settleStatus: rekapTodaySettle.status,
+                    success: rekapToday?.success,
+                    message: rekapToday?.message,
+                    data: rekapToday?.data,
+                });
+                console.log('[PotonganOngkir][debug] rekapMonth', {
+                    settleStatus: rekapMonthSettle.status,
+                    success: rekapMonth?.success,
+                    message: rekapMonth?.message,
+                    data: rekapMonth?.data,
+                });
+                console.log('[PotonganOngkir][debug] rekapAll', {
+                    settleStatus: rekapAllSettle.status,
+                    success: rekapAll?.success,
+                    message: rekapAll?.message,
+                    data: rekapAll?.data,
+                });
+
+                const getPotonganWithFallback = async (
+                    rekapResponse: any,
+                    startDate: string,
+                    endDate: string,
+                    label: string
+                ): Promise<number> => {
+                    if (rekapResponse?.success) {
+                        return getPotonganOngkirFromRekapKomisi(rekapResponse);
+                    }
+
+                    console.log('[PotonganOngkir][debug] fallback to rekap-komisi-detail', {
+                        label,
+                        reason: rekapResponse?.message,
+                        startDate,
+                        endDate,
+                    });
+
+                    try {
+                        const detailRes = await apiService.getRekapKomisiDetail(konsumenId, startDate, endDate);
+                        console.log('[PotonganOngkir][debug] detail fallback result', {
+                            label,
+                            success: detailRes?.success,
+                            message: detailRes?.message,
+                            data: detailRes?.data,
+                        });
+
+                        if (!detailRes?.success) {
+                            return 0;
+                        }
+
+                        return getPotonganOngkirFromRekapKomisiDetail(detailRes);
+                    } catch (errorDetail) {
+                        console.log('[PotonganOngkir][debug] detail fallback error', {
+                            label,
+                            error: String(errorDetail),
+                        });
+                        return 0;
+                    }
+                };
+
+                baseSummary.potonganOngkirToday = await getPotonganWithFallback(rekapToday, todayStr, todayStr, 'today');
+                baseSummary.potonganOngkirMonth = await getPotonganWithFallback(rekapMonth, monthStartStr, todayStr, 'month');
+                baseSummary.potonganOngkirAllDates = await getPotonganWithFallback(rekapAll, allStartDate, todayStr, 'all');
+
+                console.log('[PotonganOngkir][debug] parsed', {
+                    potonganOngkirToday: baseSummary.potonganOngkirToday,
+                    potonganOngkirMonth: baseSummary.potonganOngkirMonth,
+                    potonganOngkirAllDates: baseSummary.potonganOngkirAllDates,
+                });
+            } else {
+                console.log('[PotonganOngkir][debug] skipped because konsumenId empty');
+            }
+
+            setStatsSummary(baseSummary);
         } catch (error) {
             console.error('Error fetching stats summary:', error);
             setStatsSummary(emptySummary);
         }
     }, [
+        getPotonganOngkirFromRekapKomisiDetail,
+        getPotonganOngkirFromRekapKomisi,
         getKomisiFromPayload,
         getPendapatanBersihFromPayload,
         getOrderCountFromPayload,
         getOnlineMinutesFromPayload,
         getPelangganBaruFromPayload,
         getPendapatanFromPayload,
+        userData?.id_konsumen,
         toNumber,
     ]);
 
@@ -735,7 +990,7 @@ function HomeScreen() {
                 // Fetch balance from API
                 await fetchBalance(userData.no_hp);
                 await fetchPendapatan(userData.no_hp);
-                await fetchStatsSummary(userData.no_hp, selectedFilter);
+                await fetchStatsSummary(userData.no_hp, selectedFilter, userData?.id_konsumen);
                 await fetchUnreadNotifCount(userData.id_konsumen);
 
                 // TODO: Fetch other data from API
@@ -763,15 +1018,15 @@ function HomeScreen() {
             if (filterId === 'live_order') {
                 console.log('Fetching live order data...');
                 await fetchPendapatan(userData.no_hp, 'live_order');
-                await fetchStatsSummary(userData.no_hp, 'live_order');
+                await fetchStatsSummary(userData.no_hp, 'live_order', userData?.id_konsumen);
             } else if (filterId === 'pasca_order') {
                 console.log('Fetching pasca order data...');
                 await fetchPendapatan(userData.no_hp, 'pasca_order');
-                await fetchStatsSummary(userData.no_hp, 'pasca_order');
+                await fetchStatsSummary(userData.no_hp, 'pasca_order', userData?.id_konsumen);
             } else {
                 console.log('Fetching all data...');
                 await fetchPendapatan(userData.no_hp, 'semua');
-                await fetchStatsSummary(userData.no_hp, 'semua');
+                await fetchStatsSummary(userData.no_hp, 'semua', userData?.id_konsumen);
             }
         }
     }, [userData?.no_hp, fetchStatsSummary]);
@@ -1806,6 +2061,8 @@ function HomeScreen() {
                         </View>
                     </View>
 
+                    
+
                     <View style={[styles.orderStatsGrid, styles.orderStatsGridSecondRow]}>
                         <View style={[styles.orderStatCard, styles.orderStatCardToday]}>
                             <Text style={styles.orderStatLabel}>Pendapatan Hari Ini</Text>
@@ -1831,23 +2088,23 @@ function HomeScreen() {
 
                     <View style={[styles.orderStatsGrid, styles.orderStatsGridSecondRow]}>
                         <View style={[styles.orderStatCard, styles.orderStatCardToday]}>
-                            <Text style={styles.orderStatLabel}>Komisi Hari Ini</Text>
+                            <Text style={styles.orderStatLabel}>Potongan Ongkir Hari Ini</Text>
                             <Text style={[styles.orderStatValue, styles.orderStatValueCurrency]} numberOfLines={1} adjustsFontSizeToFit>
-                                {formatCurrencyCompact(statsSummary.komisiToday)}
+                                {formatCurrencyCompact(statsSummary.potonganOngkirToday)}
                             </Text>
                         </View>
 
                         <View style={[styles.orderStatCard, styles.orderStatCardMonth]}>
-                            <Text style={styles.orderStatLabel}>Komisi Bulan Ini</Text>
+                            <Text style={styles.orderStatLabel}>Potongan Ongkir Bulan Ini</Text>
                             <Text style={[styles.orderStatValue, styles.orderStatValueCurrency]} numberOfLines={1} adjustsFontSizeToFit>
-                                {formatCurrencyCompact(statsSummary.komisiMonth)}
+                                {formatCurrencyCompact(statsSummary.potonganOngkirMonth)}
                             </Text>
                         </View>
 
                         <View style={[styles.orderStatCard, styles.orderStatCardAll]}>
-                            <Text style={styles.orderStatLabel}>Komisi Total</Text>
+                            <Text style={styles.orderStatLabel}>Potongan Ongkir Total</Text>
                             <Text style={[styles.orderStatValue, styles.orderStatValueCurrency]} numberOfLines={1} adjustsFontSizeToFit>
-                                {formatCurrencyCompact(statsSummary.komisiAllDates)}
+                                {formatCurrencyCompact(statsSummary.potonganOngkirAllDates)}
                             </Text>
                         </View>
                     </View>

@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { memo, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Clipboard, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Clipboard, Image, Linking, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface TransaksiDetailModalProps {
     transaksi: any;
@@ -28,6 +28,8 @@ const TransaksiDetailModal = memo(({
     const [userData, setUserData] = useState<any>(null);
     const [approveText, setApproveText] = useState('');
     const [isApproving, setIsApproving] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
+    const [showCancelDialog, setShowCancelDialog] = useState(false);
     
     // Real-time status updates
     const [currentTransaksi, setCurrentTransaksi] = useState(transaksi);
@@ -765,6 +767,92 @@ const TransaksiDetailModal = memo(({
             pathname: '/transaksi-manual/edit',
             params: { transaksi: JSON.stringify(currentTransaksi) },
         });
+    };
+
+    const isOwnerKurirTransaksi = (): boolean => {
+        const userIdKonsumen = String(userData?.id_konsumen || '');
+        const userIdSopir = String(userData?.id_sopir || userData?.id || '');
+
+        const transaksiIdKurir = String(currentTransaksi?.id_kurir || currentTransaksi?.id_konsumen_kurir || '');
+        const transaksiIdSopir = String(currentTransaksi?.id_sopir || '');
+
+        return (
+            (!!userIdKonsumen && !!transaksiIdKurir && userIdKonsumen === transaksiIdKurir) ||
+            (!!userIdSopir && !!transaksiIdSopir && userIdSopir === transaksiIdSopir)
+        );
+    };
+
+    const isOwnerAgenTransaksi = (): boolean => {
+        const userIdKonsumen = String(userData?.id_konsumen || '');
+        const transaksiIdAgen = String(currentTransaksi?.id_agen || '');
+        return !!userIdKonsumen && !!transaksiIdAgen && userIdKonsumen === transaksiIdAgen;
+    };
+
+    const canCancelTransaksi = (): boolean => {
+        const status = (currentTransaksi?.status || '').toUpperCase();
+        const statusBlocked = ['CANCEL', 'CANCELLED'].includes(status);
+        return !statusBlocked && (isOwnerKurirTransaksi() || isOwnerAgenTransaksi());
+    };
+
+    const handleOpenCancelDialog = () => {
+        setShowCancelDialog(true);
+    };
+
+    const handleCloseCancelDialog = () => {
+        if (!isApproving) {
+            setShowCancelDialog(false);
+        }
+    };
+
+const handleCancelTransaksi = async () => {
+        if (!userData?.no_hp) {
+            Alert.alert('Error', 'Data user tidak ditemukan');
+            return;
+        }
+
+        const alasanPembatalan = cancelReason.trim();
+        if (!alasanPembatalan) {
+            Alert.alert('Perhatian', 'Alasan pembatalan wajib diisi');
+            return;
+        }
+
+        try {
+            setIsApproving(true);
+
+            const response = await apiService.cancelTransaksiManual({
+                id_transaksi: String(currentTransaksi.id || currentTransaksi.id_transaksi),
+                no_hp: userData.no_hp,
+                biaya_antar: String(currentTransaksi.tarif || '0'),
+                agen_kurir: String(currentTransaksi.id_agen || '-'),
+                nama_layanan: currentTransaksi.nama_layanan || currentTransaksi.jenis_layanan || currentTransaksi.service || '-',
+                alamat_penjemputan: currentTransaksi.alamat_jemput || currentTransaksi.alamat_penjemputan || '-',
+                alamat_tujuan: currentTransaksi.alamat_antar || currentTransaksi.alamat_tujuan || '-',
+                alasan_pembatalan: alasanPembatalan,
+            });
+
+            if (response.success) {
+                setCurrentTransaksi((prev: any) => ({
+                    ...prev,
+                    status: 'CANCEL',
+                    status_text: 'Dibatalkan',
+                }));
+                setCancelReason('');
+                setShowCancelDialog(false);
+
+                if (onRefresh) {
+                    onRefresh();
+                }
+
+                Alert.alert('Berhasil', 'Transaksi berhasil dibatalkan');
+            } else {
+                Alert.alert('Error', response.message || 'Gagal membatalkan transaksi');
+            }
+        } catch (error) {
+            console.error('Error cancel transaksi:', error);
+            Alert.alert('Error', 'Terjadi kesalahan saat membatalkan transaksi');
+        } finally {
+            setIsApproving(false);
+        }
     };
 
     const handleShare = async () => {
@@ -1617,8 +1705,85 @@ const TransaksiDetailModal = memo(({
                     </View>
                 )}
 
+                {canCancelTransaksi() && (
+                    <View style={styles.cancelTransaksiSection}>
+                        <TouchableOpacity
+                            style={[
+                                styles.cancelTransaksiButton,
+                                isApproving && styles.actionButtonDisabled,
+                            ]}
+                            onPress={handleOpenCancelDialog}
+                            disabled={isApproving}
+                            activeOpacity={0.8}
+                        >
+                            {isApproving ? (
+                                <ActivityIndicator size="small" color="#ffffff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="close-circle-outline" size={20} color="#ffffff" />
+                                    <Text style={styles.cancelTransaksiButtonText}>Cancel Transaksi</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
+                
+
                 <View style={{ height: 32 }} />
             </ScrollView>
+
+            <Modal
+                visible={showCancelDialog}
+                transparent
+                animationType="fade"
+                onRequestClose={handleCloseCancelDialog}
+            >
+                <View style={styles.cancelDialogOverlay}>
+                    <View style={styles.cancelDialogCard}>
+                        <Text style={styles.cancelDialogTitle}>Konfirmasi Pembatalan</Text>
+                        <Text style={styles.cancelDialogDesc}>
+                            Isi alasan pembatalan transaksi #{currentTransaksi.kode_order || currentTransaksi.id}
+                        </Text>
+
+                        <TextInput
+                            style={styles.cancelReasonInput}
+                            value={cancelReason}
+                            onChangeText={setCancelReason}
+                            placeholder="Masukkan alasan pembatalan"
+                            placeholderTextColor="#9ca3af"
+                            multiline
+                            numberOfLines={4}
+                            textAlignVertical="top"
+                            editable={!isApproving}
+                        />
+
+                        <View style={styles.cancelDialogActions}>
+                            <TouchableOpacity
+                                style={[styles.cancelDialogSecondaryButton, isApproving && styles.actionButtonDisabled]}
+                                onPress={handleCloseCancelDialog}
+                                disabled={isApproving}
+                            >
+                                <Text style={styles.cancelDialogSecondaryButtonText}>Tutup</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.cancelDialogPrimaryButton,
+                                    (isApproving || !cancelReason.trim()) && styles.actionButtonDisabled,
+                                ]}
+                                onPress={handleCancelTransaksi}
+                                disabled={isApproving || !cancelReason.trim()}
+                            >
+                                {isApproving ? (
+                                    <ActivityIndicator size="small" color="#ffffff" />
+                                ) : (
+                                    <Text style={styles.cancelDialogPrimaryButtonText}>Ya, Batalkan</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 });
@@ -1995,6 +2160,101 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     editTransaksiButtonText: {
+        color: '#ffffff',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    cancelTransaksiSection: {
+        backgroundColor: '#fff1f2',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#ef4444',
+    },
+    cancelReasonLabel: {
+        fontSize: 13,
+        color: '#7f1d1d',
+        fontWeight: '600',
+        marginBottom: 8,
+    },
+    cancelReasonInput: {
+        minHeight: 90,
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: '#fecaca',
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        color: '#1f2937',
+        fontSize: 14,
+        marginBottom: 12,
+    },
+    cancelDialogOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    cancelDialogCard: {
+        backgroundColor: '#ffffff',
+        borderRadius: 14,
+        padding: 16,
+    },
+    cancelDialogTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#111827',
+        marginBottom: 6,
+    },
+    cancelDialogDesc: {
+        fontSize: 13,
+        color: '#4b5563',
+        marginBottom: 12,
+    },
+    cancelDialogActions: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    cancelDialogSecondaryButton: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        backgroundColor: '#ffffff',
+        borderRadius: 8,
+        paddingVertical: 11,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelDialogSecondaryButtonText: {
+        color: '#374151',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    cancelDialogPrimaryButton: {
+        flex: 1,
+        backgroundColor: '#dc2626',
+        borderRadius: 8,
+        paddingVertical: 11,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelDialogPrimaryButtonText: {
+        color: '#ffffff',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    cancelTransaksiButton: {
+        backgroundColor: '#dc2626',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 8,
+    },
+    cancelTransaksiButtonText: {
         color: '#ffffff',
         fontSize: 15,
         fontWeight: '700',

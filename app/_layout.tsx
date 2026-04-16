@@ -1,5 +1,6 @@
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,13 +10,18 @@ import { useDeepLinkHandler } from '@/hooks/use-deep-link';
 
 import InAppNotification from "@/components/InAppNotification";
 import messaging from '@react-native-firebase/messaging';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Alert, Linking } from 'react-native';
+import { Alert, Animated, Easing, ImageBackground, Linking, StyleSheet, View } from 'react-native';
 import { notificationEvents } from '../utils/notificationEvents';
 
 // Enable debug mode - set to false for production
 const DEBUG_NOTIFICATIONS = false;
+
+// Keep native splash visible until the first React frame is ready.
+SplashScreen.preventAutoHideAsync().catch(() => {
+    // Ignore if splash screen was already hidden.
+});
 
 export const unstable_settings = {
     anchor: '(tabs)',
@@ -24,6 +30,8 @@ export const unstable_settings = {
 export default function RootLayout() {
     const colorScheme = useColorScheme();
     const router = useRouter();
+    const [showSplash, setShowSplash] = useState(true);
+    const splashOpacity = useRef(new Animated.Value(1)).current;
 
     const [notif, setNotif] = useState({
         visible: false,
@@ -60,6 +68,28 @@ export default function RootLayout() {
     useEffect(() => {
         registerForPush();
     }, []);
+
+    useEffect(() => {
+        const hideNativeTimer = setTimeout(() => {
+            SplashScreen.hideAsync().catch(() => {
+                // Native splash may already be hidden on some builds.
+            });
+        }, 50);
+
+        const hideCustomSplashTimer = setTimeout(() => {
+            Animated.timing(splashOpacity, {
+                toValue: 0,
+                duration: 350,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+            }).start(() => setShowSplash(false));
+        }, 1600);
+
+        return () => {
+            clearTimeout(hideNativeTimer);
+            clearTimeout(hideCustomSplashTimer);
+        };
+    }, [splashOpacity]);
 
     // Handle notification opened from background/closed state
     useEffect(() => {
@@ -225,8 +255,30 @@ export default function RootLayout() {
                     <Stack.Screen name="saldo/transfer" options={{ headerShown: false }} />
 
                 </Stack>
+                {showSplash && (
+                    <Animated.View pointerEvents="none" style={[styles.splashOverlay, { opacity: splashOpacity }]}
+                    >
+                        <ImageBackground
+                            source={require('../assets/images/splash-full.jpeg')}
+                            resizeMode="cover"
+                            style={styles.splashImage}
+                        />
+                    </Animated.View>
+                )}
                 <StatusBar style="auto" />
             </ThemeProvider>
         </SafeAreaProvider>
     );
 }
+
+const styles = StyleSheet.create({
+    splashOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 9999,
+    },
+    splashImage: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+    },
+});

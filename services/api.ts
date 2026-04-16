@@ -610,6 +610,35 @@ class ApiService {
         });
     }
 
+    // Cancel Transaksi Manual
+    async cancelTransaksiManual(data: {
+        id_transaksi: string;
+        no_hp: string;
+        biaya_antar: string;
+        agen_kurir: string;
+        nama_layanan?: string;
+        alamat_penjemputan?: string;
+        alamat_tujuan?: string;
+        alasan_pembatalan: string;
+    }): Promise<ApiResponse> {
+        const formData = new FormData();
+
+        formData.append('id_transaksi', data.id_transaksi);
+        formData.append('btn_simpan', 'delete');
+        formData.append('no_hp', data.no_hp);
+        formData.append('nama_layanan', data.nama_layanan || '-');
+        formData.append('alamat_penjemputan', data.alamat_penjemputan || '-');
+        formData.append('alamat_tujuan', data.alamat_tujuan || '-');
+        formData.append('biaya_antar', data.biaya_antar || '0');
+        formData.append('agen_kurir', data.agen_kurir);
+        formData.append('alasan_pembatalan', data.alasan_pembatalan);
+
+        return this.request(API_ENDPOINTS.CANCEL_TRANSAKSI_MANUAL, {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
     // Get Provinsi
     async getProvinsi(): Promise<ApiResponse> {
         return this.request(API_ENDPOINTS.GET_PROVINSI, {
