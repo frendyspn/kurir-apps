@@ -1,0 +1,5653 @@
+<?php
+
+namespace App\Http\Controllers\V1;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Barryvdh\DomPDF\Facade\Pdf;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use DB;
+use Log;
+use Carbon\Carbon;
+
+
+class KurirController extends Controller
+{
+    public function __construct(Request $req){
+        // cekHeaderApi(getallheaders()['Authorization']);
+
+        if ($req->token == '') {
+            // http_response_code(404);
+            // exit(json_encode(['Message' => 'Token Tidak Berlaku']));
+        }
+        cekTokenLogin($req->token);
+    }
+
+    public function cekStatusSopir(Request $req)
+    {
+        $get_konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+
+        // normalize numeric-zero fields to empty string for clients expecting empty values
+        if ($get_konsumen) {
+            $this->normalizeKonsumen($get_konsumen);
+        }
+
+        if(!$get_konsumen){
+            header('Content-Type: application/json');
+                return response()->json([
+                    'success' => false,
+                    'message' => ''
+                ]);
+        }
+
+
+        $sopir = DB::table('rb_sopir')->where('id_konsumen', $get_konsumen->id_konsumen)->first();
+
+        if ($sopir) {
+            // convert lampiran path to full URL if present
+            if (!empty($sopir->lampiran)) {
+                $sopir->lampiran = $this->urlForStoragePath($sopir->lampiran);
+            }
+
+            if (!empty($sopir->lampiran_stnk)) {
+                $sopir->lampiran_stnk = $this->urlForStoragePath($sopir->lampiran_stnk);
+            }
+
+            if (!empty($sopir->foto_diri)) {
+                $sopir->foto_diri = $this->urlForStoragePath($sopir->foto_diri);
+            }
+
+            if ($sopir->id_jenis_kendaraan == 1) {
+                $sopir->jenis_kendaraan = 'Motor';
+            } elseif ($sopir->id_jenis_kendaraan == 2) {
+                $sopir->jenis_kendaraan = 'Mobil';
+            }
+
+            $sopir->no_hp = $get_konsumen->no_hp;
+
+            header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'data' => $sopir,
+                    'message' => 'Sopir Sudah Terdaftar'
+                ]);
+        } else {
+            header('Content-Type: application/json');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sopir Belum Terdaftar'
+                ]);
+        }
+    }
+
+    public function updateKelengkapanData(Request $req)
+    {
+        Log::info($req->all());
+        // Validate required fields
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'type_kendaraan' => 'required',
+            'merek' => 'required',
+            'plat_nomor' => 'required',
+            // 'foto_sim' => 'required',
+            // 'foto_stnk' => 'required',
+            // 'foto_diri' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Cari konsumen berdasarkan no_hp
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+
+        if (!$konsumen) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Mohon refresh halaman ini'
+            ], 404);
+        }
+
+        $id_konsumen = $konsumen->id_konsumen;
+
+        // Siapkan data untuk rb_sopir
+        // Handle foto_sim: allow multipart file upload or base64 string
+        $lampiranPath = null;
+        $lampiranStnkPath = null;
+        $lampiranDiriPath = null;
+
+        try {
+            if ($req->hasFile('foto_sim') && $req->file('foto_sim')->isValid()) {
+                $file = $req->file('foto_sim');
+                $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
+                $publicPath = public_path('uploads/sopir');
+                if (!is_dir($publicPath)) {
+                    mkdir($publicPath, 0755, true);
+                }
+                // Cek apakah file berhasil dipindahkan
+                try {
+                    $file->move($publicPath, $filename);
+                    $lampiranPath = '/uploads/sopir/' . $filename;
+                } catch (\Exception $e) {
+                    error_log('Gagal memindahkan file ke ' . $publicPath . '/' . $filename . ' : ' . $e->getMessage());
+                }
+            } elseif ($req->filled('foto_sim') && !$req->hasFile('foto_sim')) {
+                // Only process non-file input: accept a base64 string or a URL/path
+                $fotoSim = $req->foto_sim;
+                
+                // detect data URI
+                if (preg_match('/^data:\w+\/[-+.\w]+;base64,/', $fotoSim)) {
+                    $parts = explode(',', $fotoSim);
+                    $meta = $parts[0];
+                    $data = $parts[1] ?? '';
+                    $ext = 'png';
+                    if (preg_match('/image\/(\w+)/', $meta, $m)) {
+                        $ext = $m[1];
+                    }
+                    $decoded = base64_decode($data);
+                    if ($decoded !== false) {
+                        $filename = time() . '_foto_sim.' . $ext;
+                        $publicPath = public_path('uploads/sopir');
+                        if (!is_dir($publicPath)) {
+                            mkdir($publicPath, 0755, true);
+                        }
+                        $fullPath = $publicPath . '/' . $filename;
+                        file_put_contents($fullPath, $decoded);
+                        $lampiranPath = '/uploads/sopir/' . $filename;
+                    }
+                } elseif (filter_var($fotoSim, FILTER_VALIDATE_URL) || (strpos($fotoSim, '/uploads/') === 0)) {
+                    // if client sent a valid URL or path starting with /uploads/, keep as-is
+                    $lampiranPath = $fotoSim;
+                }
+                // Otherwise, ignore invalid input (don't store temp paths or random strings)
+            }
+
+            if ($req->hasFile('foto_stnk') && $req->file('foto_stnk')->isValid()) {
+                $file = $req->file('foto_stnk');
+                $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
+                $publicPath = public_path('uploads/sopir');
+                if (!is_dir($publicPath)) {
+                    mkdir($publicPath, 0755, true);
+                }
+                // Cek apakah file berhasil dipindahkan
+                try {
+                    $file->move($publicPath, $filename);
+                    $lampiranStnkPath = '/uploads/sopir/' . $filename;
+                } catch (\Exception $e) {
+                    error_log('Gagal memindahkan file ke ' . $publicPath . '/' . $filename . ' : ' . $e->getMessage());
+                }
+            } elseif ($req->filled('foto_stnk') && !$req->hasFile('foto_stnk')) {
+                // Only process non-file input: accept a base64 string or a URL/path
+                $fotostnk = $req->foto_stnk;
+                
+                // detect data URI
+                if (preg_match('/^data:\w+\/[-+.\w]+;base64,/', $fotostnk)) {
+                    $parts = explode(',', $fotostnk);
+                    $meta = $parts[0];
+                    $data = $parts[1] ?? '';
+                    $ext = 'png';
+                    if (preg_match('/image\/(\w+)/', $meta, $m)) {
+                        $ext = $m[1];
+                    }
+                    $decoded = base64_decode($data);
+                    if ($decoded !== false) {
+                        $filename = time() . '_foto_sim.' . $ext;
+                        $publicPath = public_path('uploads/sopir');
+                        if (!is_dir($publicPath)) {
+                            mkdir($publicPath, 0755, true);
+                        }
+                        $fullPath = $publicPath . '/' . $filename;
+                        file_put_contents($fullPath, $decoded);
+                        $lampiranStnkPath = '/uploads/sopir/' . $filename;
+                    }
+                } elseif (filter_var($fotostnk, FILTER_VALIDATE_URL) || (strpos($fotostnk, '/uploads/') === 0)) {
+                    // if client sent a valid URL or path starting with /uploads/, keep as-is
+                    $lampiranStnkPath = $fotostnk;
+                }
+                // Otherwise, ignore invalid input (don't store temp paths or random strings)
+            }
+
+
+            if ($req->hasFile('foto_diri') && $req->file('foto_diri')->isValid()) {
+                $file = $req->file('foto_diri');
+                $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
+                $publicPath = public_path('uploads/sopir');
+                if (!is_dir($publicPath)) {
+                    mkdir($publicPath, 0755, true);
+                }
+                // Cek apakah file berhasil dipindahkan
+                try {
+                    $file->move($publicPath, $filename);
+                    $lampiranDiriPath = '/uploads/sopir/' . $filename;
+                } catch (\Exception $e) {
+                    error_log('Gagal memindahkan file ke ' . $publicPath . '/' . $filename . ' : ' . $e->getMessage());
+                }
+            } elseif ($req->filled('foto_diri') && !$req->hasFile('foto_diri')) {
+                // Only process non-file input: accept a base64 string or a URL/path
+                $fotoDiri = $req->foto_diri;
+                
+                // detect data URI
+                if (preg_match('/^data:\w+\/[-+.\w]+;base64,/', $fotoDiri)) {
+                    $parts = explode(',', $fotoDiri);
+                    $meta = $parts[0];
+                    $data = $parts[1] ?? '';
+                    $ext = 'png';
+                    if (preg_match('/image\/(\w+)/', $meta, $m)) {
+                        $ext = $m[1];
+                    }
+                    $decoded = base64_decode($data);
+                    if ($decoded !== false) {
+                        $filename = time() . '_foto_sim.' . $ext;
+                        $publicPath = public_path('uploads/sopir');
+                        if (!is_dir($publicPath)) {
+                            mkdir($publicPath, 0755, true);
+                        }
+                        $fullPath = $publicPath . '/' . $filename;
+                        file_put_contents($fullPath, $decoded);
+                        $lampiranDiriPath = '/uploads/sopir/' . $filename;
+                    }
+                } elseif (filter_var($fotoDiri, FILTER_VALIDATE_URL) || (strpos($fotoDiri, '/uploads/') === 0)) {
+                    // if client sent a valid URL or path starting with /uploads/, keep as-is
+                    $lampiranDiriPath = $fotoDiri;
+                }
+                // Otherwise, ignore invalid input (don't store temp paths or random strings)
+            }
+
+        } catch (\Exception $e) {
+            // Log error for debugging if needed
+            error_log('File upload error: ' . $e->getMessage());
+            $lampiranPath = null;
+            $lampiranStnkPath = null;
+            $lampiranDiriPath = null;
+        }
+
+        
+
+        $dataSopir = [
+            'id_konsumen' => $id_konsumen,
+            'id_jenis_kendaraan' => $req->type_kendaraan,
+            'merek' => $req->merek,
+            'plat_nomor' => $req->plat_nomor,
+            'lampiran' => $lampiranPath,
+            'lampiran_stnk' => $lampiranStnkPath,
+            'foto_diri' => $lampiranDiriPath,
+        ];
+
+        try {
+            DB::beginTransaction();
+
+            $sopir = DB::table('rb_sopir')->where('id_konsumen', $id_konsumen)->first();
+
+            if ($sopir) {
+                // Update existing
+                DB::table('rb_sopir')->where('id_konsumen', $id_konsumen)->update([
+                    'id_jenis_kendaraan' => $req->type_kendaraan,
+                    'merek' => $req->merek,
+                    'plat_nomor' => $req->plat_nomor,
+                    'lampiran' => $lampiranPath,
+                    'lampiran_stnk' => $lampiranStnkPath,
+                    'foto_diri' => $lampiranDiriPath,
+                ]);
+
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Data kelengkapan sopir berhasil diperbarui',
+                    // 'data' => $dataSopir
+                ]);
+            } else {
+                // Insert new record
+                DB::table('rb_sopir')->insert($dataSopir);
+
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Data kelengkapan sopir berhasil disimpan',
+                    // 'data' => $dataSopir
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function updateProfileFoto(Request $req)
+    {
+        
+        // Validate required fields
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'foto_diri' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Cari konsumen berdasarkan no_hp
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+
+        if (!$konsumen) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'No HP tidak ditemukan di rb_konsumen'
+            ], 404);
+        }
+
+        $id_konsumen = $konsumen->id_konsumen;
+
+        $lampiranDiriPath = null;
+
+        try {
+            if ($req->hasFile('foto_diri') && $req->file('foto_diri')->isValid()) {
+                $file = $req->file('foto_diri');
+                $filename = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
+                $publicPath = public_path('uploads/sopir');
+                if (!is_dir($publicPath)) {
+                    mkdir($publicPath, 0755, true);
+                }
+                // Cek apakah file berhasil dipindahkan
+                try {
+                    $file->move($publicPath, $filename);
+                    $lampiranDiriPath = '/uploads/sopir/' . $filename;
+                } catch (\Exception $e) {
+                    error_log('Gagal memindahkan file ke ' . $publicPath . '/' . $filename . ' : ' . $e->getMessage());
+                }
+            } elseif ($req->filled('foto_diri') && !$req->hasFile('foto_diri')) {
+                // Only process non-file input: accept a base64 string or a URL/path
+                $fotoDiri = $req->foto_diri;
+                
+                // detect data URI
+                if (preg_match('/^data:\w+\/[-+.\w]+;base64,/', $fotoDiri)) {
+                    $parts = explode(',', $fotoDiri);
+                    $meta = $parts[0];
+                    $data = $parts[1] ?? '';
+                    $ext = 'png';
+                    if (preg_match('/image\/(\w+)/', $meta, $m)) {
+                        $ext = $m[1];
+                    }
+                    $decoded = base64_decode($data);
+                    if ($decoded !== false) {
+                        $filename = time() . '_foto_sim.' . $ext;
+                        $publicPath = public_path('uploads/sopir');
+                        if (!is_dir($publicPath)) {
+                            mkdir($publicPath, 0755, true);
+                        }
+                        $fullPath = $publicPath . '/' . $filename;
+                        file_put_contents($fullPath, $decoded);
+                        $lampiranDiriPath = '/uploads/sopir/' . $filename;
+                    }
+                } elseif (filter_var($fotoDiri, FILTER_VALIDATE_URL) || (strpos($fotoDiri, '/uploads/') === 0)) {
+                    // if client sent a valid URL or path starting with /uploads/, keep as-is
+                    $lampiranDiriPath = $fotoDiri;
+                }
+                // Otherwise, ignore invalid input (don't store temp paths or random strings)
+            }
+
+        } catch (\Exception $e) {
+            // Log error for debugging if needed
+            error_log('File upload error: ' . $e->getMessage());
+            $lampiranDiriPath = null;
+        }
+
+        
+
+        $dataSopir = [
+            'id_konsumen' => $id_konsumen,
+            'foto_diri' => $lampiranDiriPath,
+        ];
+
+        try {
+            DB::beginTransaction();
+
+            $get_konsumen = DB::table('rb_konsumen as a')
+            ->select('a.*', 'b.province_name as provinsi', 'c.city_name as kota', 'd.subdistrict_name as kecamatan', 'e.foto_diri', 'e.foto_diri as foto')
+            ->leftJoin('tb_ro_provinces as b', 'b.province_id', 'a.provinsi_id')
+            ->leftJoin('tb_ro_cities as c', 'c.city_id', 'a.kota_id')
+            ->leftJoin('tb_ro_subdistricts as d', 'd.subdistrict_id', 'a.kecamatan_id')
+            ->leftJoin('rb_sopir as e', 'a.id_konsumen', 'e.id_konsumen')
+            ->where('a.id_konsumen', $id_konsumen)
+            ->first();
+            // normalize numeric-zero fields to empty string for clients expecting empty values
+            if ($get_konsumen) {
+                $this->normalizeKonsumen($get_konsumen);
+            }
+            if ($get_konsumen) {
+
+                // ensure foto is a full URL
+                if (!empty($get_konsumen->foto)) {
+                    $get_konsumen->foto = $this->urlForStoragePath($get_konsumen->foto);
+                }
+
+                if (!empty($get_konsumen->foto_diri)) {
+                    $get_konsumen->foto_diri = $this->urlForStoragePath($get_konsumen->foto_diri);
+                }
+
+            }
+
+            $sopir = DB::table('rb_sopir')->where('id_konsumen', $id_konsumen)->first();
+
+            if ($sopir) {
+                // Update existing
+                DB::table('rb_sopir')->where('id_konsumen', $id_konsumen)->update([
+                    'foto_diri' => $lampiranDiriPath,
+                ]);
+
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Data kelengkapan sopir berhasil diperbarui',
+                    'data' => $get_konsumen
+                ]);
+            } else {
+                // Insert new record
+                DB::table('rb_sopir')->insert($dataSopir);
+
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Data kelengkapan sopir berhasil disimpan',
+                    'data' => $get_konsumen
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function cekNoHp(Request $req)
+    {
+        $get_konsumen = DB::table('rb_konsumen as a')
+        ->select('a.*', 'b.province_name as provinsi', 'c.city_name as kota', 'd.subdistrict_name as kecamatan', 'e.foto_diri', 'e.foto_diri as foto')
+        ->leftJoin('tb_ro_provinces as b', 'b.province_id', 'a.provinsi_id')
+        ->leftJoin('tb_ro_cities as c', 'c.city_id', 'a.kota_id')
+        ->leftJoin('tb_ro_subdistricts as d', 'd.subdistrict_id', 'a.kecamatan_id')
+        ->leftJoin('rb_sopir as e', 'a.id_konsumen', 'e.id_konsumen')
+        ->where('a.no_hp', $req->no_hp)
+        ->first();
+        // normalize numeric-zero fields to empty string for clients expecting empty values
+        if ($get_konsumen) {
+            $this->normalizeKonsumen($get_konsumen);
+        }
+        if ($get_konsumen) {
+
+            // ensure foto is a full URL
+            if (!empty($get_konsumen->foto)) {
+                $get_konsumen->foto = $this->urlForStoragePath($get_konsumen->foto);
+            }
+
+            if (!empty($get_konsumen->foto_diri)) {
+                $get_konsumen->foto_diri = $this->urlForStoragePath($get_konsumen->foto_diri);
+            }
+
+            $sopir = DB::table('rb_sopir')->where('id_konsumen', $get_konsumen->id_konsumen)->first();
+            if ($sopir && !empty($sopir->lampiran)) {
+                $sopir->lampiran = $this->urlForStoragePath($sopir->lampiran);
+            }
+            if ($sopir) {
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => false,
+                    'registered' => true,
+                    'data' => $get_konsumen,
+                    'message' => 'No HP Sudah Terdaftar Sebagai Kurir'
+                ]);
+            } else {
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'data' => $get_konsumen,
+                    'registered' => true,
+                    'message' => 'No HP Sudah Terdaftar'
+                ]);
+            }
+            
+        } else {
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'registered' => false,
+                'message' => 'No HP Belum Terdaftar'
+            ]);
+        }
+        
+    }
+
+
+
+    public function getProvinsi(Request $req)
+    {
+        $data = DB::table('tb_ro_provinces')->orderBy('province_name')->get();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'message' => 'Data Provinsi Berhasil Dimuat'
+        ]);
+    }
+
+
+    public function getKota(Request $req)
+    {
+        $data = DB::table('tb_ro_cities')->orderBy('city_name');
+
+        if ($req->provinsi_id) {
+            $data = $data->where('province_id', $req->provinsi_id);
+        }
+
+        $data = $data->get();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'message' => 'Data Kota Berhasil Dimuat'
+        ]);
+    }
+
+
+    public function getKecamatan(Request $req)
+    {
+        $data = DB::table('tb_ro_subdistricts')->orderBy('subdistrict_name');
+
+        if ($req->kota_id) {
+            $data = $data->where('city_id', $req->kota_id);
+        }
+
+        $data = $data->get();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'message' => 'Data Kecamatan Berhasil Dimuat'
+        ]);
+    }
+
+    public function kirimOtpRegister(Request $req){
+        
+        if($req->otp){
+            $otp = $req->otp;
+        } else {
+            $newTime = date('Y-m-d H:i:s', strtotime('+1 minutes', time()));
+            $otp = rand(000000, 999999);
+            $dt_update['no_hp'] = $req->no_hp;
+            $dt_update['otp'] = $otp;
+            $dt_update['otp_expired'] = $newTime;
+            DB::table('otp_register')->insert($dt_update);
+        }
+        notif_wa_otp($req->no_hp, $otp);
+        
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'message' => $otp
+        ]);
+        
+    }
+
+    public function submitDataRegister(Request $req)
+    {
+        // Validasi field minimal
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'nama_lengkap' => 'required',
+            'email' => 'required|email',
+            'jenis_kelamin' => 'required',
+            'tanggal_lahir' => 'required',
+            'tempat_lahir' => 'required',
+            'provinsi_id' => 'required',
+            'kota_id' => 'required',
+            'kecamatan_id' => 'required',
+            'alamat' => 'required',
+            'otp' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Cek OTP di tabel otp_register (no_hp, otp, otp_expired)
+        $otpRow = DB::table('otp_register')
+            ->where('no_hp', $req->no_hp)
+            ->where('otp', $req->otp)
+            ->first();
+
+        if (!$otpRow) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP tidak ditemukan'
+            ], 404);
+        }
+
+        // Cek expired
+        if (!empty($otpRow->otp_expired)) {
+            $now = date('Y-m-d H:i:s');
+            if (strtotime($otpRow->otp_expired) < strtotime($now)) {
+                header('Content-Type: application/json');
+                http_response_code(400);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP sudah kadaluarsa'
+                ], 400);
+            }
+        }
+
+        DB::beginTransaction();
+        try {
+            // Cek apakah no_hp sudah terdaftar di rb_konsumen
+            $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+
+            if (!$konsumen) {
+                // Insert ke rb_konsumen
+                $dtKonsumen = [
+                    'username' => $req->no_hp,
+                    'password' => Hash::make(rand(10000000, 99999999)),
+                    'nama_lengkap' => $req->nama_lengkap,
+                    'email' => $req->email,
+                    'jenis_kelamin' => $req->jenis_kelamin,
+                    'tanggal_lahir' => date('Y-m-d', strtotime($req->tanggal_lahir)),
+                    'tempat_lahir' => $req->tempat_lahir,
+                    'alamat_lengkap' => $req->alamat,
+                    'kecamatan_id' => $req->kecamatan_id,
+                    'kota_id' => $req->kota_id,
+                    'provinsi_id' => $req->provinsi_id,
+                    'no_hp' => $req->no_hp,
+                    'foto' => '-',
+                    'tanggal_daftar' => date('Y-m-d'),
+                    'token' => 'N',
+                    'referral_id' => null,
+                    'verifikasi' => 'Y',
+                ];
+
+                $id_konsumen = DB::table('rb_konsumen')->insertGetId($dtKonsumen);
+                $konsumen = DB::table('rb_konsumen')->where('id_konsumen', $id_konsumen)->first();
+            }
+
+            // Pastikan ada rb_sopir untuk id_konsumen ini
+            $sopir = DB::table('rb_sopir')->where('id_konsumen', $konsumen->id_konsumen)->first();
+            if (!$sopir) {
+                $dtSopir = [
+                    'id_konsumen' => $konsumen->id_konsumen,
+                    'kecamatan_id' => $req->kecamatan_id,
+                    'kota_id' => $req->kota_id,
+                    'provinsi_id' => $req->provinsi_id,
+                    'aktif' => 'N',
+                    'id_jenis_kendaraan' => '0',
+                    'plat_nomor' => '',
+                    'merek' => '',
+                    'lainnya' => '',
+                ];
+
+                DB::table('rb_sopir')->insert($dtSopir);
+            } else {
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Registrasi gagal, sudah terdaftar sebagai kurir',
+                    'data' => [
+                        'konsumen' => $konsumen
+                    ]
+                ]);
+            }
+
+            // Optionally mark otp_register as used (delete or update)
+            DB::table('otp_register')->where('no_hp', $req->no_hp)->delete();
+
+
+            $token = Hash::make(date('YmdHi').rand(0000,9999));
+            $dtUpdateOtp['otp_expired'] = (string)date('Y-m-d H:i:s');
+            $dtUpdateOtp['remember_token'] = (string)$token;
+            
+            DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->update($dtUpdateOtp);
+
+            http_response_code(200);
+            $dt_result['token'] = $token;
+            $dt_result['nama_lengkap'] = $konsumen->nama_lengkap;
+            $dt_result['email'] = $konsumen->email;
+            $dt_result['no_hp'] = $konsumen->no_hp;
+            $dt_result['agen'] = 0;
+            $dt_result['koordinator_kota'] = 0;
+            $dt_result['koordinator_kecamatan'] = 0;
+            $dt_result['level'] = 'kurir';
+            
+
+
+            DB::commit();
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Registrasi sukses, silahkan login',
+                'data' => [
+                    'konsumen' => $konsumen,
+                    'token' => $token,
+                    'user_login' => $dt_result
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+
+    }
+
+    /**
+     * Update data konsumen by id_konsumen
+     * Expects request fields similar to the $dtKonsumen array used on register.
+     */
+    public function updateKonsumen(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'id_konsumen' => 'required|integer',
+            'no_hp' => 'required',
+            'nama_lengkap' => 'required',
+            'email' => 'required|email',
+            'jenis_kelamin' => 'required',
+            'tanggal_lahir' => 'required',
+            'tempat_lahir' => 'required',
+            'provinsi_id' => 'required',
+            'kota_id' => 'required',
+            'kecamatan_id' => 'required',
+            'alamat' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $id = $req->id_konsumen;
+
+        $existing = DB::table('rb_konsumen')->where('id_konsumen', $id)->first();
+        if (!$existing) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Data konsumen tidak ditemukan'
+            ], 404);
+        }
+
+        // Build update array (follow provided structure but avoid overwriting password unless requested)
+        $dtKonsumen = [
+            'username' => $req->no_hp,
+            'nama_lengkap' => $req->nama_lengkap,
+            'email' => $req->email,
+            'jenis_kelamin' => $req->jenis_kelamin,
+            'tanggal_lahir' => date('Y-m-d', strtotime($req->tanggal_lahir)),
+            'tempat_lahir' => $req->tempat_lahir,
+            'alamat_lengkap' => $req->alamat,
+            'kecamatan_id' => $req->kecamatan_id,
+            'kota_id' => $req->kota_id,
+            'provinsi_id' => $req->provinsi_id,
+            'no_hp' => $req->no_hp,
+            'foto' => $req->filled('foto') ? $req->foto : ($existing->foto ?? '-'),
+            'token' => $req->filled('token') ? $req->token : ($existing->token ?? 'N'),
+            'referral_id' => $req->filled('referral_id') ? $req->referral_id : ($existing->referral_id ?? null),
+            'verifikasi' => $req->filled('verifikasi') ? $req->verifikasi : ($existing->verifikasi ?? 'Y'),
+        ];
+
+        // Optional: update password if provided or explicitly request reset_password=1
+        if ($req->filled('password')) {
+            $dtKonsumen['password'] = Hash::make($req->password);
+        } elseif ($req->filled('reset_password') && $req->reset_password == '1') {
+            $dtKonsumen['password'] = Hash::make(rand(10000000, 99999999));
+        }
+
+        // Optional: allow overriding tanggal_daftar only when provided
+        if ($req->filled('tanggal_daftar')) {
+            $dtKonsumen['tanggal_daftar'] = date('Y-m-d', strtotime($req->tanggal_daftar));
+        }
+
+        try {
+            DB::beginTransaction();
+
+            DB::table('rb_konsumen')->where('id_konsumen', $id)->update($dtKonsumen);
+
+            DB::commit();
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Data konsumen berhasil diperbarui',
+                'data' => $dtKonsumen
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function deleteKonsumen(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'id_konsumen' => 'required|integer',
+            'no_hp' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $id = $req->id_konsumen;
+
+        $existing = DB::table('rb_konsumen')->where('id_konsumen', $id)->first();
+        if (!$existing) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Data konsumen tidak ditemukan'
+            ], 404);
+        }
+
+        // Build update array (follow provided structure but avoid overwriting password unless requested)
+        $dtKonsumen = [
+            'referral_id' => null,
+            'is_show' => 0,
+        ];
+
+
+        try {
+            DB::beginTransaction();
+
+            DB::table('rb_konsumen')->where('id_konsumen', $id)->update($dtKonsumen);
+
+            DB::commit();
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Data konsumen berhasil diperbarui',
+                'data' => $dtKonsumen
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function updateKonsumenSimple(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'id_konsumen' => 'required|integer',
+            'no_hp' => 'required',
+            'nama_lengkap' => 'required',
+            // 'email' => 'required|email',
+            // 'jenis_kelamin' => 'required',
+            // 'tanggal_lahir' => 'required',
+            // 'tempat_lahir' => 'required',
+            // 'provinsi_id' => 'required',
+            // 'kota_id' => 'required',
+            // 'kecamatan_id' => 'required',
+            'alamat' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $id = $req->id_konsumen;
+
+        $existing = DB::table('rb_konsumen')->where('id_konsumen', $id)->first();
+        if (!$existing) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Data konsumen tidak ditemukan'
+            ], 404);
+        }
+
+        // Build update array (follow provided structure but avoid overwriting password unless requested)
+        $dtKonsumen = [
+            'username' => $req->no_hp,
+            'nama_lengkap' => $req->nama_lengkap,
+            // 'email' => $req->email,
+            // 'jenis_kelamin' => $req->jenis_kelamin,
+            // 'tanggal_lahir' => date('Y-m-d', strtotime($req->tanggal_lahir)),
+            // 'tempat_lahir' => $req->tempat_lahir,
+            'alamat_lengkap' => $req->alamat,
+            // 'kecamatan_id' => $req->kecamatan_id,
+            // 'kota_id' => $req->kota_id,
+            // 'provinsi_id' => $req->provinsi_id,
+            'no_hp' => $req->no_hp,
+            // 'foto' => $req->filled('foto') ? $req->foto : ($existing->foto ?? '-'),
+            // 'token' => $req->filled('token') ? $req->token : ($existing->token ?? 'N'),
+            // 'referral_id' => $req->filled('referral_id') ? $req->referral_id : ($existing->referral_id ?? null),
+            // 'verifikasi' => $req->filled('verifikasi') ? $req->verifikasi : ($existing->verifikasi ?? 'Y'),
+        ];
+
+        // Optional: update password if provided or explicitly request reset_password=1
+        if ($req->filled('password')) {
+            $dtKonsumen['password'] = Hash::make($req->password);
+        } elseif ($req->filled('reset_password') && $req->reset_password == '1') {
+            $dtKonsumen['password'] = Hash::make(rand(10000000, 99999999));
+        }
+
+        // Optional: allow overriding tanggal_daftar only when provided
+        if ($req->filled('tanggal_daftar')) {
+            $dtKonsumen['tanggal_daftar'] = date('Y-m-d', strtotime($req->tanggal_daftar));
+        }
+
+        try {
+            DB::beginTransaction();
+
+            DB::table('rb_konsumen')->where('id_konsumen', $id)->update($dtKonsumen);
+
+            DB::commit();
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Data konsumen berhasil diperbarui',
+                'data' => $dtKonsumen
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+
+
+    public function getDistance($titik_jemput, $titik_tujuan)
+    {
+        if ($titik_jemput == $titik_tujuan) {
+            return "Tidak Bisa Sama";
+        }
+        $arrJemput = explode(',', $titik_jemput);
+        $arrTujuan = explode(',', $titik_tujuan);
+
+        $latitudeFrom = $arrJemput[0];
+        $longitudeFrom = $arrJemput[1];
+
+        $latitudeTo = $arrTujuan[0];
+        $longitudeTo = $arrTujuan[1];
+
+        //Calculate distance from latitude and longitude
+        $theta = $longitudeFrom - $longitudeTo;
+        $dist = sin(deg2rad($latitudeFrom)) * sin(deg2rad($latitudeTo)) +  cos(deg2rad($latitudeFrom)) * cos(deg2rad($latitudeTo)) * cos(deg2rad($theta));
+        $dist = acos($dist);
+        $dist = rad2deg($dist);
+        $miles = $dist * 60 * 1.1515;
+
+        $distance = ($miles * 1.609344).' km';
+
+        return ceil((float)$distance);
+    }
+
+
+    public function getPrice($titik_jemput, $titik_tujuan, $service){
+        // return $this->getCityFromLatLng($titik_jemput);
+        if ($titik_jemput == $titik_tujuan) {
+            return "Tidak Bisa Sama";
+        }
+        $distance = $this->getDistance($titik_jemput, $titik_tujuan);
+        if ($distance > $this->getConfig('max_jarak_km') && $this->getConfig('max_jarak_km') > 0) {
+            return 0-1;
+        }
+        
+        $kota = DB::table('tb_ro_cities')->where('city_name', $this->getCityFromLatLng($titik_jemput))->first();
+        if($kota){
+            $id_kota = $kota->city_id;
+        } else {
+            $id_kota = '0';
+        }
+        
+        $getTarif = DB::table('tarif_layanan')->where('id_kota', $id_kota)->first();
+        if(!$getTarif){
+            $getTarif = DB::table('tarif_layanan')->where('id_kota', '0')->first();
+        }
+        
+        // $tarif_awal = $this->getConfig('ongkir_awal_kurir');
+        // $tarif_dinamis = $this->getConfig('ongkir_per_km');
+        if($service == 'RIDE'){
+            $tarif_awal = $getTarif->tarif_awal_ride;
+            $tarif_dinamis = $getTarif->tarif_km_ride;    
+        } else if($service == 'SEND'){
+            $tarif_awal = $getTarif->tarif_awal_send;
+            $tarif_dinamis = $getTarif->tarif_km_send;    
+        } else if($service == 'SHOP'){
+            $tarif_awal = $getTarif->tarif_awal_shop;
+            $tarif_dinamis = $getTarif->tarif_km_shop;
+        } else if($service == 'FOOD'){
+            $tarif_awal = $getTarif->tarif_awal_food;
+            $tarif_dinamis = $getTarif->tarif_km_food;
+        } else {
+            $tarif_awal = $getTarif->tarif_awal_ride;
+            $tarif_dinamis = $getTarif->tarif_km_ride;
+        }
+        
+        $tarif = $tarif_awal + ($tarif_dinamis * $distance);
+        
+        $dtIns['kota'] = $id_kota;
+        $dtIns['awal'] = $tarif_awal;
+        $dtIns['dinamis'] = $tarif_dinamis;
+        $dtIns['jarak'] = $distance;
+        $dtIns['ongkir'] = $tarif;
+        $dtIns['service'] = $service;
+        DB::table('api_ongkir')->insert($dtIns);
+
+        return $tarif;
+    }
+    
+    function getCityFromLatLng($latLing) {
+        
+        // Make a request to the Google Maps Geocoding API
+        $url = "https://maps.googleapis.com/maps/api/geocode/json?latlng=".str_replace(' ','',$latLing)."&key=AIzaSyAjruIgxJm6OS9ewzXUJ17CR7DMPcozpfo";
+        $response = file_get_contents($url);
+    
+        // Decode the JSON response
+        $data = json_decode($response, true);
+    
+        // Extract city from the response
+        if ($data && isset($data['results'][0]['address_components'])) {
+            $addressComponents = $data['results'][0]['address_components'];
+            $city = '';
+    
+            foreach ($addressComponents as $component) {
+                if (in_array('administrative_area_level_2', $component['types'])) {
+                    $city = $component['long_name'];
+                    break;
+                }
+            }
+    
+            // Return the city name
+            return $city;
+        }
+    
+        // Return an error message if city is not found
+        return 'City not found';
+    }
+
+    public function orderKurir(Request $req)
+    {
+        $titik_jemput = $req->titik_jemput;
+        $titik_tujuan = $req->titik_tujuan;
+        $service = $req->service;
+        $id_penjualan = $req->id_penjualan;
+        $souce = $req->source;
+
+        if ($titik_jemput == '' || $titik_tujuan == '') {
+            http_response_code(404);
+            exit(json_encode(['Message' => 'Titik antar dan jemput tidak boleh kosong']));
+        }
+
+        if ($titik_jemput == $titik_tujuan) {
+            http_response_code(404);
+            exit(json_encode(['Message' => 'Titik antar dan jemput tidak boleh sama']));
+        }
+
+        $tarif = $this->getPrice($titik_jemput, $titik_tujuan, $service);
+
+        $data['tarif'] = $tarif;
+
+        if ($id_penjualan != '' && ($souce == 'POS' || $souce == 'MP')) {
+            $cekPenjualan = DB::table('kurir_order')->where('id_penjualan', $id_penjualan)->where('source', $souce)->whereNotIn('status',['cancel','onprocess'])->get();
+            if (count($cekPenjualan) > 0) {
+                http_response_code(404);
+                exit(json_encode(['Message' => 'Id Penjualan Masih Aktif']));
+            }
+
+            $cekTblPenjualan = DB::table('rb_penjualan')->where('id_penjualan', $id_penjualan)->first();
+            if (!$cekTblPenjualan) {
+                http_response_code(404);
+                exit(json_encode(['Message' => 'Penjualan Tidak Ada Di Marketplace']));
+            }
+
+            $data['kode_order'] = 'SND-'.time();
+        }
+
+        if ($req->exists('jenis_layanan') && $req->source == 'APPS') {
+            $dtLogin = cekTokenLoginKonsumen($req->login_token);
+            $dtTambahan = json_decode($req->data_tambahan);
+
+            if ($req->jenis_layanan == 'KURIR') {
+                $data['status'] = 'NEW';
+
+                $data['kode_order']                 = 'SND-'.time();
+                $data['alamat_jemput']              = $dtTambahan->alamat_jemput;
+                $data['pemberi_barang']             = $dtTambahan->pemberi_barang;
+                $data['telp_pemberi_barang']        = $dtTambahan->telp_pemberi_barang;
+                $data['catatan_pemberi_barang']     = $dtTambahan->catatan_pemberi_barang;
+
+                $data['alamat_antar']               = $dtTambahan->alamat_antar;
+                $data['penerima_barang']            = $dtTambahan->penerima_barang;
+                $data['telp_penerima_barang']       = $dtTambahan->telp_penerima_barang;
+                $data['catatan_penerima_barang']    = $dtTambahan->catatan_penerima_barang;
+            } else if ($req->jenis_layanan == 'RIDE') {
+                $data['status'] = 'NEW';
+
+                $data['kode_order']                 = 'RDR-'.time();
+                $data['alamat_jemput']              = $dtTambahan->alamat_jemput;
+                // $data['catatan_pemberi_barang']     = $dtTambahan->catatan_pemberi_barang;
+
+                $data['alamat_antar']               = $dtTambahan->alamat_antar;
+                // $data['catatan_penerima_barang']    = $dtTambahan->catatan_penerima_barang;
+            } else if ($req->jenis_layanan == 'FOOD') {
+                $data['status'] = 'NEW';
+
+                $data['kode_order']                 = 'FOD-'.time();
+                $data['alamat_jemput']              = $dtTambahan->alamat_jemput;
+                $data['id_penjualan']               = $dtTambahan->id_penjualan;
+                $data['alamat_antar']               = $dtTambahan->alamat_antar;
+            } else if ($req->jenis_layanan == 'SHOP') {
+                $data['status'] = 'PENDING';
+
+                $data['kode_order']                 = 'SHP-'.time();
+                $data['alamat_jemput']              = $dtTambahan->alamat_jemput;
+                $data['alamat_antar']               = $dtTambahan->alamat_antar;
+                $data['pemberi_barang']             = $dtTambahan->pemberi_barang;
+                $data['id_reseller']             = $dtTambahan->id_reseller;
+            } else {
+                # code...
+            }
+            $data['id_pemesan']             = $dtLogin->id_konsumen;
+            $data['jenis_layanan']          = $req->jenis_layanan;
+        } else {
+            $data['id_penjualan'] = $id_penjualan;
+        }
+
+        if ($req->exists('metode_pembayaran')){
+            $data['metode_pembayaran'] = $req->metode_pembayaran;
+        } else {
+            $data['metode_pembayaran'] = 'WALLET';
+        }
+
+        $data['titik_jemput'] = $titik_jemput;
+        $data['titik_antar'] = $titik_tujuan;
+        $data['service'] = $service;
+        
+        $data['tanggal_order'] = date('Y-m-d H:i:s');
+        $data['source'] = $souce;
+        
+
+        $insertOrder = DB::table('kurir_order')->insert($data);
+        $id = DB::getPdo()->lastInsertId();
+
+        if ($insertOrder) {
+            notifOrderBaru();
+            http_response_code(200);
+            exit(json_encode(['Message' => 'Order Sukses', 'id' => $id]));
+        } else {
+            http_response_code(404);
+            exit(json_encode(['Message' => 'Kesalahan Menyimpan Order']));
+        }
+        
+        
+    }
+
+    public function test(Request $req)
+    {
+        return "TEST";
+    }
+
+    /**
+     * Return available courier services for frontend
+     *
+     * Response shape:
+     * {
+     *   ride: { key, name, description },
+     *   send: { ... },
+     *   food: { ... },
+     *   shop: { ... }
+     * }
+     */
+    public function layananKurir(Request $req)
+    {
+        $services = [
+            'ride' => [
+                'key' => 'RIDE',
+                'name' => 'Ride',
+                'description' => 'Layanan antar penumpang cepat dan aman',
+            ],
+            'send' => [
+                'key' => 'SEND',
+                'name' => 'Send',
+                'description' => 'Kirim barang/ paket antar lokasi',
+            ],
+            'food' => [
+                'key' => 'FOOD',
+                'name' => 'Food',
+                'description' => 'Pesan dan antar makanan dari restoran',
+            ],
+            'shop' => [
+                'key' => 'SHOP',
+                'name' => 'Shop',
+                'description' => 'Belanja dan antar barang dari toko/reseller',
+            ],
+        ];
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $services,
+            'message' => 'Layanan kurir berhasil diambil'
+        ]);
+    }
+
+
+    public function notifUpdateOrder(Request $req)
+    {
+        $token = $req->device_token;
+        $pesan = $req->pesan;
+        $no_hp = $req->no_hp;
+        
+        notifOrderUpdate($no_hp, $pesan);
+        notifOrderUpdate($token, $pesan);
+    }
+
+    /**
+     * Return list of agen (drivers who are agents)
+     *
+     * Uses query specified by the user:
+     * DB::table('rb_sopir as a')->select('b.id_konsumen', 'b.nama_lengkap')
+     *     ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+     *     ->where('a.agen', '1')->where('a.aktif', 'Y')->orderBy('b.nama_lengkap')->get()
+     */
+    public function getAgens(Request $req)
+    {
+        $agens = DB::table('rb_sopir as a')
+            ->select('b.id_konsumen', 'b.nama_lengkap', 'c.city_name as kota')
+            ->rightJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+            // ->leftJoin('rb_konsumen as c', 'c.kota_id', 'b.kota_id')
+            ->leftJoin('tb_ro_cities as c', 'c.city_id', 'b.kota_id')
+            ->where('a.agen', '1')
+            ->where('a.aktif', 'Y')
+            // ->where('c.no_hp', $req->no_hp)
+            ->orderBy('b.nama_lengkap')
+            ->get();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $agens,
+            'message' => 'Daftar agen berhasil diambil'
+        ]);
+    }
+
+    /**
+     * Return list of pelanggan (customers)
+     * 
+     * Request params:
+     * - search: string (optional) - search by nama_lengkap or no_hp
+     * 
+     * Response:
+     * {
+     *   success: true,
+     *   data: [{id_konsumen, nama_lengkap, no_hp}, ...],
+     *   message: "..."
+     * }
+     */
+    public function getPelanggan(Request $req)
+    {
+        $query = DB::table('rb_konsumen as b')
+            ->select('b.id_konsumen', 'b.nama_lengkap', 'b.no_hp', 'b.alamat_lengkap');
+
+        // Filter pencarian berdasarkan nama_lengkap atau no_hp
+        $search = trim((string)$req->input('search'));
+        if (!empty($search) && $search != '') {
+            // helper to remove non-digits
+            $onlyDigits = preg_replace('/[^0-9]/', '', $search);
+
+            $query->where(function($q) use ($search, $onlyDigits) {
+                // always allow name search
+                $q->where('b.nama_lengkap', 'like', '%' . $search . '%');
+
+                // if search contains digits, treat it as phone and add multiple variants
+                if ($onlyDigits !== '') {
+                    // canonical forms to match: +62..., 62..., 08..., and digits-only (no leading +)
+                    $variants = [];
+
+                    // digits-only as stored (could be 08123... or 628123... or +628123...)
+                    $digits = $onlyDigits;
+
+                    // if starts with 62 (e.g. 62812...)
+                    if (strpos($digits, '62') === 0) {
+                        // as +62...
+                        $variants[] = '+' . $digits;
+                        // as 62...
+                        $variants[] = $digits;
+                        // as 08... (replace leading 62 with 0)
+                        $variants[] = '0' . substr($digits, 2);
+                    } elseif (strpos($digits, '0') === 0) {
+                        // already starts with 0 => 08...
+                        $variants[] = $digits;
+                        // also possible without leading 0 (e.g. 8...)
+                        if (strpos($digits, '08') === 0) {
+                            $variants[] = ltrim($digits, '0');
+                        }
+                        // also with +62 variant
+                        if (strpos($digits, '08') === 0) {
+                            $variants[] = '+62' . substr($digits, 1);
+                            $variants[] = '62' . substr($digits, 1);
+                        }
+                    } elseif (strpos($digits, '8') === 0) {
+                        // starts with 8 e.g. 8123... => 08123..., +628123..., 628123...
+                        $variants[] = '0' . $digits;
+                        $variants[] = '+62' . $digits;
+                        $variants[] = '62' . $digits;
+                    } else {
+                        // fallback: try partial matches
+                        $variants[] = $digits;
+                    }
+
+                    // make variants unique
+                    $variants = array_values(array_unique($variants));
+
+                    // add where clauses for each variant (exact or LIKE)
+                    foreach ($variants as $v) {
+                        $q->orWhere('b.no_hp', 'like', '%' . $v . '%');
+                    }
+                } else {
+                    // if not digits, still allow searching name only (already added)
+                }
+            });
+        }
+
+        $pelanggan = $query->orderBy('b.nama_lengkap')->get();
+
+        // convert foto paths to full URLs when present
+        $pelanggan->transform(function($item) {
+            if (!empty($item->foto)) {
+                $item->foto = $this->urlForStoragePath($item->foto);
+            }
+            return $item;
+        });
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $pelanggan,
+            'message' => 'Daftar pelanggan berhasil diambil',
+            'total' => $pelanggan->count()
+        ]);
+    }
+
+    public function getPelangganFavorite(Request $req)
+    {
+        $query = DB::table('rb_konsumen as b')
+            ->select('b.id_konsumen', 'b.nama_lengkap', 'b.no_hp')
+            ->leftJoin('rb_konsumen_favorite as c', 'c.id_konsumen', 'b.id_konsumen')
+            ->where('c.id_user', $req->id_konsumen);
+
+        // Filter pencarian berdasarkan nama_lengkap atau no_hp
+        $search = trim((string)$req->input('search'));
+        if (!empty($search) && $search != '') {
+            // helper to remove non-digits
+            $onlyDigits = preg_replace('/[^0-9]/', '', $search);
+
+            $query->where(function($q) use ($search, $onlyDigits) {
+                // always allow name search
+                $q->where('b.nama_lengkap', 'like', '%' . $search . '%');
+
+                // if search contains digits, treat it as phone and add multiple variants
+                if ($onlyDigits !== '') {
+                    // canonical forms to match: +62..., 62..., 08..., and digits-only (no leading +)
+                    $variants = [];
+
+                    // digits-only as stored (could be 08123... or 628123... or +628123...)
+                    $digits = $onlyDigits;
+
+                    // if starts with 62 (e.g. 62812...)
+                    if (strpos($digits, '62') === 0) {
+                        // as +62...
+                        $variants[] = '+' . $digits;
+                        // as 62...
+                        $variants[] = $digits;
+                        // as 08... (replace leading 62 with 0)
+                        $variants[] = '0' . substr($digits, 2);
+                    } elseif (strpos($digits, '0') === 0) {
+                        // already starts with 0 => 08...
+                        $variants[] = $digits;
+                        // also possible without leading 0 (e.g. 8...)
+                        if (strpos($digits, '08') === 0) {
+                            $variants[] = ltrim($digits, '0');
+                        }
+                        // also with +62 variant
+                        if (strpos($digits, '08') === 0) {
+                            $variants[] = '+62' . substr($digits, 1);
+                            $variants[] = '62' . substr($digits, 1);
+                        }
+                    } elseif (strpos($digits, '8') === 0) {
+                        // starts with 8 e.g. 8123... => 08123..., +628123..., 628123...
+                        $variants[] = '0' . $digits;
+                        $variants[] = '+62' . $digits;
+                        $variants[] = '62' . $digits;
+                    } else {
+                        // fallback: try partial matches
+                        $variants[] = $digits;
+                    }
+
+                    // make variants unique
+                    $variants = array_values(array_unique($variants));
+
+                    // add where clauses for each variant (exact or LIKE)
+                    foreach ($variants as $v) {
+                        $q->orWhere('b.no_hp', 'like', '%' . $v . '%');
+                    }
+                } else {
+                    // if not digits, still allow searching name only (already added)
+                }
+            });
+        }
+
+        $pelanggan = $query->orderBy('b.nama_lengkap')->get();
+
+        // convert foto paths to full URLs when present
+        $pelanggan->transform(function($item) {
+            if (!empty($item->foto)) {
+                $item->foto = $this->urlForStoragePath($item->foto);
+            }
+            return $item;
+        });
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $pelanggan,
+            'message' => 'Daftar pelanggan berhasil diambil',
+            'total' => $pelanggan->count()
+        ]);
+    }
+
+    /**
+     * Convert a storage path (like /storage/uploads/...) or relative path to a full URL
+     * 
+     * Handles paths stored as:
+     * - /storage/uploads/sopir/file.jpg (old database format - from storage/app/public)
+     * - /uploads/sopir/file.jpg (new database format - from public/uploads)
+     * - storage/uploads/sopir/file.jpg (without leading slash)
+     * 
+     * Returns URL accessible via web:
+     * - https://api.satutoko.my.id/uploads/sopir/file.jpg
+     */
+    private function urlForStoragePath($path)
+    {
+        if (empty($path) || $path === '-') return $path;
+
+        // If already a full URL, return as-is
+        if (preg_match('#^https?://#i', $path)) {
+            return $path;
+        }
+
+        // Normalize the path:
+        // /storage/uploads/sopir/file.jpg -> uploads/sopir/file.jpg (old format)
+        // /uploads/sopir/file.jpg -> uploads/sopir/file.jpg (new format)
+        $normalized = $path;
+        
+        // Remove leading /storage/ or storage/ prefix (old format from storage/app/public)
+        // if (strpos($normalized, '/storage/') === 0) {
+        //     $normalized = substr($normalized, 9); // Remove '/storage/' -> 'uploads/sopir/...'
+        // } elseif (strpos($normalized, 'storage/') === 0) {
+        //     $normalized = substr($normalized, 8); // Remove 'storage/' -> 'uploads/sopir/...'
+        // }
+        
+        // Remove leading slash if exists for new format
+        $normalized = ltrim($normalized, '/');
+        
+        // Build full URL
+        // Option 1: Try Laravel's asset() helper
+        if (function_exists('asset')) {
+            return asset($normalized);
+        }
+
+        // Option 2: Use APP_URL from environment
+        $appUrl = env('APP_URL', null);
+        if ($appUrl) {
+            return rtrim($appUrl, '/') . '/' . $normalized;
+        }
+
+        // Option 3: Fallback to current request host
+        $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+        $scheme = (!empty($_SERVER['REQUEST_SCHEME']) ? $_SERVER['REQUEST_SCHEME'] : (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http'));
+        return $scheme . '://' . $host . '/' . $normalized;
+    }
+
+    /**
+     * Normalize konsumen object fields where the database stores 0 for empty foreign keys.
+     * Converts 0 or '0' to an empty string for kota_id, kecamatan_id, and to '1' for provinsi_id.
+     *
+     * @param object $konsumen - passed by reference (stdClass from DB::first())
+     */
+    private function normalizeKonsumen(&$konsumen)
+    {
+        $fields = ['provinsi_id', 'kota_id', 'kecamatan_id'];
+        foreach ($fields as $f) {
+            if (property_exists($konsumen, $f)) {
+                if ($konsumen->$f === 0 || $konsumen->$f === '0') {
+                    if ($f === 'provinsi_id') {
+                        $konsumen->$f = '1';
+                    } else {
+                        $konsumen->$f = '';
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Clean phone number from frontend to format starting with 08 and only digits.
+     * - remove all non-digit characters
+     * - if starts with 62 replace with 0
+     * - if starts with +62 replace with 0
+     * - ensure it starts with 08; if not and starts with 8, prefix 0
+     */
+    private function cleanPhoneNumber($phone)
+    {
+        if (empty($phone)) return $phone;
+        // remove everything that's not a digit
+        $digits = preg_replace('/[^0-9]/', '', (string)$phone);
+
+        // replace leading +62 or 62 with 0
+        if (strpos($digits, '62') === 0) {
+            $digits = '0' . substr($digits, 2);
+        }
+
+        // if starts with 8 (e.g. 81234...), prefix 0 => 081234...
+        if (strpos($digits, '8') === 0) {
+            $digits = '0' . $digits;
+        }
+
+        return $digits;
+    }
+
+
+
+    /**
+     * Add pelanggan minimal to rb_konsumen
+     * Expects request contains: nama_lengkap, no_hp, alamat_lengkap
+     * Returns JSON response similar to other methods
+     */
+    public function addDownline(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'nama_lengkap' => 'required',
+            'no_hp' => 'required',
+            'alamat_lengkap' => 'required',
+            'referral_id' => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Normalize phone according to rules
+        $cleanNoHp = $this->cleanPhoneNumber($req->no_hp);
+
+        try {
+            DB::beginTransaction();
+
+            // Check if already exists
+            $existing = DB::table('rb_konsumen')->where('no_hp', $cleanNoHp)->first();
+            if ($existing) {
+                DB::rollBack();
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No HP sudah terdaftar',
+                    'data' => $existing
+                ], 409);
+            }
+
+            $upline = DB::table('rb_konsumen')->where('id_konsumen', $req->referral_id)->first();
+            $provinsi_id = $upline->provinsi_id ?? '0';
+            $kota_id = $upline->kota_id ?? '0';
+            $kecamatan_id = $upline->kecamatan_id ?? '0';
+
+            $dtKonsumen = [
+                'username' => $cleanNoHp,
+                // generate a random password and hash it
+                'password' => Hash::make(rand(10000000, 99999999)),
+                'nama_lengkap' => $req->nama_lengkap,
+                'email' => '-',
+                'jenis_kelamin' => 'Laki-laki',
+                'tanggal_lahir' => date('Y-m-d'),
+                'tempat_lahir' => '-',
+                'alamat_lengkap' => $req->alamat_lengkap,
+                'kecamatan_id' => $kecamatan_id,
+                'kota_id' => $kota_id,
+                'provinsi_id' => $provinsi_id,
+                'no_hp' => $cleanNoHp,
+                'foto' => '-',
+                'tanggal_daftar' => date('Y-m-d'),
+                'token' => 'N',
+                'referral_id' => $req->referral_id,
+                'verifikasi' => 'N',
+            ];
+
+            $id = DB::table('rb_konsumen')->insertGetId($dtKonsumen);
+
+            DB::commit();
+
+            $konsumen = DB::table('rb_konsumen')->where('id_konsumen', $id)->first();
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Pelanggan berhasil ditambahkan',
+                'data' => $konsumen
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+    public function bulkAddDownline(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'contacts' => 'required|array|min:1',
+            'contacts.*.id_kurir' => 'required|integer',
+            'contacts.*.nama_lengkap' => 'required|string|max:255',
+            'contacts.*.no_hp' => 'required|string|max:20',
+            'contacts.*.alamat_lengkap' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $contacts = $req->input('contacts');
+        $successfully_added = 0;
+        $failed_count = 0;
+        $errors = [];
+
+        $upline = DB::table('rb_konsumen')->where('id_konsumen', $contacts[0]['id_kurir'])->first();
+        $provinsi_id = $upline->provinsi_id ?? '0';
+        $kota_id = $upline->kota_id ?? '0';
+        $kecamatan_id = $upline->kecamatan_id ?? '0';
+
+        DB::beginTransaction();
+
+        try {
+            foreach ($contacts as $index => $contactData) {
+                try {
+                    $cleanNoHp = $this->cleanPhoneNumber($contactData['no_hp']);
+                    
+                    $existing = DB::table('rb_konsumen')->where('no_hp', $cleanNoHp)->first();
+                    if ($existing) {
+                        if($existing->is_show == 0){
+                            DB::table('rb_konsumen')->where('id_konsumen', $existing->id_konsumen)->update(['is_show' => 1]);
+                        }
+                        $failed_count++;
+                        $errors[] = "Baris " . ($index + 1) . ": {$contactData['nama_lengkap']} - No HP sudah terdaftar";
+                        continue;
+                    }
+
+                    DB::table('rb_konsumen')->insert([
+                        'username' => $cleanNoHp,
+                        'password' => Hash::make(rand(10000000, 99999999)),
+                        'nama_lengkap' => $contactData['nama_lengkap'],
+                        'email' => '-',
+                        'jenis_kelamin' => 'Laki-laki',
+                        'tanggal_lahir' => date('Y-m-d'),
+                        'tempat_lahir' => '-',
+                        'alamat_lengkap' => $contactData['alamat_lengkap'] ?? '-',
+                        'kecamatan_id' => $kecamatan_id,
+                        'kota_id' => $kota_id,
+                        'provinsi_id' => $provinsi_id,
+                        'no_hp' => $cleanNoHp,
+                        'foto' => '-',
+                        'tanggal_daftar' => date('Y-m-d'),
+                        'token' => 'N',
+                        'referral_id' => $contactData['id_kurir'],
+                        'verifikasi' => 'N',
+                    ]);
+
+                    $successfully_added++;
+                } catch (\Exception $e) {
+                    $failed_count++;
+                    $errors[] = "Baris " . ($index + 1) . ": {$contactData['nama_lengkap']} - {$e->getMessage()}";
+                }
+            }
+
+            DB::commit();
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => "Import selesai: {$successfully_added} berhasil, {$failed_count} gagal",
+                'data' => [
+                    'successfully_added' => $successfully_added,
+                    'failed_count' => $failed_count,
+                    'errors' => $errors,
+                ],
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat mengimport: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getSaldoKurir($id_konsumen)
+    {
+        $this->getPendingWithdrawRequestsOlderThan7Days();
+
+        $result = DB::table('rb_wallet_users as a')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', '=', 'a.id_konsumen')
+            ->where('b.id_konsumen', $id_konsumen)
+            ->selectRaw('
+                SUM(CASE 
+                    WHEN a.trx_type = ? THEN a.amount 
+                    WHEN a.trx_type = ? THEN -a.amount 
+                    ELSE 0 
+                END) as saldo_akhir
+            ', ['credit', 'debit'])
+            ->first();
+
+        $resultRequest = DB::table('rb_wallet_requests as a')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', '=', 'a.id_konsumen')
+            ->where('b.id_konsumen', $id_konsumen)
+            ->selectRaw('
+                SUM(CASE 
+                    WHEN a.req_type = ? THEN -a.amount 
+                    ELSE 0 
+                END) as saldo_akhir
+            ', ['withdraw'])
+            ->where('a.status', 'pending')
+            ->first();
+
+        $saldo_request = $resultRequest->saldo_akhir ?? 0;
+
+        $saldo = $result->saldo_akhir ?? 0;
+
+        return $saldo;
+    }
+
+    public function getBalance(Request $req)
+    {
+        $this->getPendingWithdrawRequestsOlderThan7Days();
+
+        $result = DB::table('rb_wallet_users as a')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', '=', 'a.id_konsumen')
+            ->where('b.no_hp', $req->no_hp)
+            ->selectRaw('
+                SUM(CASE 
+                    WHEN a.trx_type = ? THEN a.amount 
+                    WHEN a.trx_type = ? THEN -a.amount 
+                    ELSE 0 
+                END) as saldo_akhir
+            ', ['credit', 'debit'])
+            ->first();
+
+        $resultRequest = DB::table('rb_wallet_requests as a')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', '=', 'a.id_konsumen')
+            ->where('b.no_hp', $req->no_hp)
+            ->selectRaw('
+                SUM(CASE 
+                    WHEN a.req_type = ? THEN -a.amount 
+                    ELSE 0 
+                END) as saldo_akhir
+            ', ['withdraw'])
+            ->where('a.status', 'pending')
+            ->first();
+
+        $saldo_request = $resultRequest->saldo_akhir ?? 0;
+
+        $saldo = $result->saldo_akhir ?? 0;
+
+        header('Content-Type: application/json');
+        http_response_code(200);
+        exit(json_encode(['Message' => 'Get Balance Sukses', 'balance' => $saldo+$saldo_request]));
+    }
+
+
+    // Endpoint khusus untuk pie chart jenis order (harian)
+    public function getJenisOrderDaily(Request $request)
+    {
+        $no_hp = $request->input('no_hp');
+        $date = $request->input('date', date('Y-m-d')); // Default hari ini
+        
+        $jenisOrder = DB::table('kurir_order as a')
+            ->select([
+                'a.jenis_layanan',
+                DB::raw('COUNT(*) as total_order'),
+                DB::raw('SUM(a.tarif) as total_pendapatan'),
+            ])
+            ->leftJoin('rb_sopir as b', 'b.id_sopir', '=', 'a.id_sopir')
+            ->leftJoin('rb_konsumen as c', 'c.id_konsumen', '=', 'b.id_konsumen')
+            ->where('a.status', 'FINISH')
+            ->where('c.no_hp', $no_hp)
+            ->whereDate('a.tanggal_order', $date)
+            ->whereNotNull('a.jenis_layanan')
+            ->where('a.jenis_layanan', '!=', '')
+            ->groupBy('a.jenis_layanan')
+            ->orderBy('total_order', 'desc')
+            ->get();
+        
+        // Format data untuk pie chart
+        $formatted = $this->formatJenisOrderForPieChart($jenisOrder);
+        
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $formatted,
+            'message' => 'Data jenis order berhasil diambil'
+        ]);
+    }
+    
+    // Endpoint khusus untuk pie chart jenis order (bulanan)
+    public function getJenisOrderMonthly(Request $request)
+    {
+        $no_hp = $request->input('no_hp');
+        $year = $request->input('year', date('Y'));
+        $month = $request->input('month', date('m'));
+        
+        $jenisOrder = DB::table('kurir_order as a')
+            ->select([
+                'a.jenis_layanan',
+                DB::raw('COUNT(*) as total_order'),
+                DB::raw('SUM(a.tarif) as total_pendapatan'),
+            ])
+            ->leftJoin('rb_sopir as b', 'b.id_sopir', '=', 'a.id_sopir')
+            ->leftJoin('rb_konsumen as c', 'c.id_konsumen', '=', 'b.id_konsumen')
+            ->where('a.status', 'FINISH')
+            ->where('c.no_hp', $no_hp)
+            ->whereYear('a.tanggal_order', $year)
+            ->whereMonth('a.tanggal_order', $month)
+            ->whereNotNull('a.jenis_layanan')
+            ->where('a.jenis_layanan', '!=', '')
+            ->groupBy('a.jenis_layanan')
+            ->orderBy('total_order', 'desc')
+            ->get();
+        
+        // Format data untuk pie chart
+        $formatted = $this->formatJenisOrderForPieChart($jenisOrder);
+        
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $formatted,
+            'message' => 'Data jenis order berhasil diambil'
+        ]);
+    }
+    
+    // Format data untuk pie chart dengan warna yang sesuai
+    private function formatJenisOrderForPieChart($jenisOrder)
+    {
+        // Mapping warna berdasarkan jenis layanan
+        $colors = [
+            'send' => '#0d6efd',
+            'food' => '#fd7e14',
+            'ride' => '#20c997',
+            'shop' => '#6f42c1',
+        ];
+        
+        $formatted = [];
+        
+        foreach ($jenisOrder as $item) {
+            $jenis = strtolower(trim($item->jenis_layanan));
+            $color = $colors[$jenis] ?? '#6c757d'; // Default gray jika jenis tidak dikenali
+            
+            $formatted[] = [
+                'name' => ucfirst($jenis),
+                'orders' => (int)$item->total_order,
+                'pendapatan' => (int)$item->total_pendapatan,
+                'color' => $color,
+                'legendFontColor' => '#6c757d',
+                'legendFontSize' => 12,
+            ];
+        }
+        
+        return $formatted;
+    }
+    
+    // Endpoint gabungan (harian) - sudah ada, tambahkan pie chart
+    public function getOrdersDaily(Request $request)
+    {
+        $no_hp = $request->input('no_hp');
+        $date = $request->input('date', date('Y-m-d'));
+        if ($request->input('type') == 'pasca_order') {
+            $type = ['MANUAL_KURIR'];
+        } else if ($request->input('type') == 'live_order') {
+            $type = ['LIVE_ORDER'];
+        } else {
+            $type = ['LIVE_ORDER', 'MANUAL_KURIR'];
+        }
+        
+        Log::info($type);
+        Log::info($request->all());
+        
+        // Data untuk bar chart (hourly)
+        $ordersHourly = $this->getOrders($no_hp, 'daily', $date, $type);
+        
+        // Data untuk pie chart jenis order
+        $jenisOrder = DB::table('kurir_order as a')
+            ->select([
+                'a.jenis_layanan',
+                DB::raw('COUNT(*) as total_order'),
+                DB::raw('SUM(a.tarif) as total_pendapatan'),
+            ])
+            ->leftJoin('rb_sopir as b', 'b.id_sopir', '=', 'a.id_sopir')
+            ->leftJoin('rb_konsumen as c', 'c.id_konsumen', '=', 'b.id_konsumen')
+            ->where('a.status', 'FINISH')
+            ->where('c.no_hp', $no_hp)
+            ->whereDate('a.tanggal_order', $date)
+            ->whereNotNull('a.jenis_layanan')
+            ->where('a.jenis_layanan', '!=', '')
+            ->whereIn('a.source', $type)
+            ->groupBy('a.jenis_layanan')
+            ->get();
+        
+        // Format untuk chart
+        $labels = [];
+        $dataOrders = [];
+        $dataPendapatan = [];
+        
+        for ($i = 0; $i < 24; $i++) {
+            $jam = sprintf('%02d:00', $i);
+            $labels[] = $jam;
+            
+            $found = $ordersHourly->firstWhere('jam', $i);
+            $dataOrders[] = $found ? (int)$found->total_order : 0;
+            $dataPendapatan[] = $found ? (int)$found->total_pendapatan : 0;
+        }
+        
+        // Format data pie chart
+        $jenisOrderFormatted = $this->formatJenisOrderForPieChart($jenisOrder);
+        
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'orders' => [
+                    'labels' => $labels,
+                    'datasets' => [['data' => $dataOrders]]
+                ],
+                'pendapatan' => [
+                    'labels' => $labels,
+                    'datasets' => [['data' => $dataPendapatan]]
+                ],
+                'jenis_order' => $jenisOrderFormatted
+            ],
+            'date' => $date
+        ]);
+    }
+
+    // Endpoint untuk data bulanan
+    public function getOrdersMonthly(Request $request)
+    {
+        $no_hp = $request->input('no_hp');
+        $year = $request->input('year', date('Y'));
+        $month = $request->input('month', date('m'));
+        if ($request->input('type') == 'pasca_order') {
+            $type = ['MANUAL_KURIR'];
+        } else if ($request->input('type') == 'live_order') {
+            $type = ['LIVE_ORDER'];
+        } else {
+            $type = ['LIVE_ORDER', 'MANUAL_KURIR'];
+        }
+        
+        // Data untuk bar chart (daily in month)
+        $ordersDaily = $this->getOrders($no_hp, 'monthly', null, $type, $year, $month);
+        
+        // Data untuk pie chart jenis order (full month)
+        $firstDay = sprintf('%04d-%02d-01', $year, $month);
+        $lastDay = date('Y-m-t', strtotime($firstDay));
+        $jenisOrder = $this->getJenisOrderRange($no_hp, $firstDay, $lastDay, $type);
+        
+        // Format untuk chart
+        $labels = [];
+        $dataOrders = [];
+        $dataPendapatan = [];
+        
+        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        
+        for ($day = 1; $day <= $daysInMonth; $day++) {
+            $labels[] = (string)$day;
+            
+            $tanggal = sprintf('%04d-%02d-%02d', $year, $month, $day);
+            $found = $ordersDaily->firstWhere('tanggal', $tanggal);
+            
+            $dataOrders[] = $found ? (int)$found->total_order : 0;
+            $dataPendapatan[] = $found ? (int)$found->total_pendapatan : 0;
+        }
+        
+        // Format data pie chart
+        $jenisOrderFormatted = $this->formatJenisOrderForPieChart($jenisOrder);
+        
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'orders' => [
+                    'labels' => $labels,
+                    'datasets' => [['data' => $dataOrders]]
+                ],
+                'pendapatan' => [
+                    'labels' => $labels,
+                    'datasets' => [['data' => $dataPendapatan]]
+                ],
+                'jenis_order' => $jenisOrderFormatted
+            ]
+        ]);
+    }
+
+
+    public function getOrdersCustom(Request $request)
+    {
+        $no_hp = $request->input('no_hp');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        if ($request->input('type') == 'pasca_order') {
+            $type = ['MANUAL_KURIR'];
+        } else if ($request->input('type') == 'live_order') {
+            $type = ['LIVE_ORDER'];
+        } else {
+            $type = ['LIVE_ORDER', 'MANUAL_KURIR'];
+        }
+        
+        $firstDay = date('Y-m-d', strtotime($startDate));
+        $lastDay = date('Y-m-d', strtotime($endDate));
+        // Data untuk bar chart (daily in month)
+        $ordersDaily = $this->getOrders($no_hp, 'custom', $firstDay, $type, $lastDay, null);
+        // Data untuk pie chart jenis order (full month)
+        
+        $jenisOrder = $this->getJenisOrderRange($no_hp, $firstDay, $lastDay, $type);
+        
+        // Format untuk chart
+        $labels = [];
+        $dataOrders = [];
+        $dataPendapatan = [];
+        
+        // Calculate number of days between start and end date
+        $start = new \DateTime($firstDay);
+        $end = new \DateTime($lastDay);
+        $interval = $start->diff($end);
+        $daysInRange = $interval->days + 1;
+        Log::info("Custom Range: {$firstDay} to {$lastDay}, Days in range: {$daysInRange}");
+        
+        // Loop through each day in the range
+        for ($i = 0; $i < $daysInRange; $i++) {
+            $currentDate = clone $start;
+            $currentDate->modify("+{$i} days");
+            $tanggal = $currentDate->format('Y-m-d');
+            
+            // Add label as date (format: d/m or full date)
+            $labels[] = $currentDate->format('d/m');
+            
+            // Find data for this date
+            $found = $ordersDaily->firstWhere('tanggal', $tanggal);
+            
+            $dataOrders[] = $found ? (int)$found->total_order : 0;
+            $dataPendapatan[] = $found ? (int)$found->total_pendapatan : 0;
+        }
+        
+        // Format data pie chart
+        $jenisOrderFormatted = $this->formatJenisOrderForPieChart($jenisOrder);
+        Log::info('Custom Range Orders', [
+            'no_hp' => $no_hp,
+            'start_date' => $firstDay,
+            'end_date' => $lastDay,
+            'labels' => $labels,
+            'data_orders' => $dataOrders,
+            'data_pendapatan' => $dataPendapatan,
+            'jenis_order' => $jenisOrderFormatted
+        ]);
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'orders' => [
+                    'labels' => $labels,
+                    'datasets' => [['data' => $dataOrders]]
+                ],
+                'pendapatan' => [
+                    'labels' => $labels,
+                    'datasets' => [['data' => $dataPendapatan]]
+                ],
+                'jenis_order' => $jenisOrderFormatted,
+                'catatan' => $request->all(),
+            ]
+        ]);
+    }
+    
+    // Helper method untuk get orders hourly/monthly
+    private function getOrders($no_hp, $mode, $date = null, $type = ['LIVE_ORDER','MANUAL_KURIR'], $year = null, $month = null)
+    {
+        $query = DB::table('kurir_order as a')
+            ->leftJoin('rb_sopir as b', 'b.id_sopir', '=', 'a.id_sopir')
+            ->leftJoin('rb_konsumen as c', 'c.id_konsumen', '=', 'b.id_konsumen')
+            ->where('a.status', 'FINISH')
+            ->where('c.no_hp', $no_hp)
+            ->whereIn('a.source', $type);
+        
+        if ($mode === 'daily' || $mode === 'hourly') {
+            $query->select([
+                DB::raw('HOUR(a.tanggal_order) as jam'),
+                DB::raw('COUNT(*) as total_order'),
+                DB::raw('SUM(a.tarif) as total_pendapatan'),
+            ])
+            ->whereDate('a.tanggal_order', $date)
+            ->groupBy(DB::raw('HOUR(a.tanggal_order)'))
+            ->orderBy('jam', 'asc');
+            
+        } elseif ($mode === 'monthly') {
+            $query->select([
+                DB::raw('DATE(a.tanggal_order) as tanggal'),
+                DB::raw('COUNT(*) as total_order'),
+                DB::raw('SUM(a.tarif) as total_pendapatan'),
+            ])
+            ->whereYear('a.tanggal_order', $year)
+            ->whereMonth('a.tanggal_order', $month)
+            ->groupBy(DB::raw('DATE(a.tanggal_order)'))
+            ->orderBy('tanggal', 'asc');
+        } elseif ($mode === 'custom') {
+            $query->select([
+                DB::raw('DATE(a.tanggal_order) as tanggal'),
+                DB::raw('COUNT(*) as total_order'),
+                DB::raw('SUM(a.tarif) as total_pendapatan'),
+            ])
+            ->whereBetween(DB::raw('DATE(a.tanggal_order)'), [$date, $year])
+            ->groupBy(DB::raw('DATE(a.tanggal_order)'))
+            ->orderBy('tanggal', 'asc');
+        }
+        
+        return $query->get();
+    }
+
+    // Helper: Get jenis order untuk range tanggal
+    private function getJenisOrderRange($no_hp, $startDate, $endDate, $type)
+    {
+        return DB::table('kurir_order as a')
+            ->select([
+                'a.jenis_layanan',
+                DB::raw('COUNT(*) as total_order'),
+                DB::raw('SUM(a.tarif) as total_pendapatan'),
+            ])
+            ->leftJoin('rb_sopir as b', 'b.id_sopir', '=', 'a.id_sopir')
+            ->leftJoin('rb_konsumen as c', 'c.id_konsumen', '=', 'b.id_konsumen')
+            ->where('a.status', 'FINISH')
+            ->where('c.no_hp', $no_hp)
+            ->whereBetween(DB::raw('DATE(a.tanggal_order)'), [$startDate, $endDate])
+            ->whereNotNull('a.jenis_layanan')
+            ->where('a.jenis_layanan', '!=', '')
+            ->whereIn('a.source', $type)
+            ->groupBy('a.jenis_layanan')
+            ->get();
+    }
+
+    /**
+     * Save transaksi manual kurir
+     * 
+     * Request body:
+     * - no_hp: string (nomor HP kurir)
+     * - no_hp_pelanggan: string (nomor HP pelanggan, "-" jika baru)
+     * - no_hp_pelanggan_baru: string (nomor HP pelanggan baru jika no_hp_pelanggan = "-")
+     * - nama_pelanggan: string (nama pelanggan baru)
+     * - nama_layanan: string (RIDE|SEND|FOOD|SHOP)
+     * - alamat_penjemputan: string
+     * - alamat_tujuan: string
+     * - biaya_antar: numeric
+     * - nama_toko: string (required for SHOP/FOOD)
+     * - agen_kurir: string (id_konsumen agen)
+     * - tanggal_order: Y-m-d H:i:s
+     * - btn_simpan: string (create|update|revisi|delete|approve)
+     * - id_transaksi: int (required for update/revisi/delete/approve)
+     * - alasan_revisi: string (required for revisi)
+     * - alasan_pembatalan: string (required for delete)
+     * - text_approve: string (must be "SETUJU" for approve)
+     * - id_sopir: int (required for approve)
+     * 
+     * Response:
+     * {
+     *   success: true/false,
+     *   message: "...",
+     *   data: {...}
+     * }
+     */
+    public function saveTransaksi(Request $req)
+    {
+        
+        $messages = [
+            'no_hp.required' => 'No HP Kurir Harus Diisi',
+            'nama_layanan.required' => 'Nama Layanan Harus Dipilih',
+            'alamat_penjemputan.required' => 'Alamat Penjemputan Harus Diisi',
+            'alamat_tujuan.required' => 'Alamat Tujuan Harus Diisi',
+            'biaya_antar.required' => 'Biaya Antar Harus Diisi',
+            'biaya_antar.numeric' => 'Biaya Antar Harus Angka',
+            'nama_toko.required' => 'Nama Toko/Resto Harus Diisi',
+            'agen_kurir.required' => 'Agen Kurir Harus Diisi',
+            'no_hp_pelanggan_baru.required' => 'No HP Pelanggan Harus Diisi',
+            'no_hp_pelanggan_baru.numeric' => 'No HP Pelanggan Harus Angka Saja',
+        ];
+
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'nama_layanan' => 'required',
+            'alamat_penjemputan' => 'required',
+            'alamat_tujuan' => 'required',
+            'biaya_antar' => 'required|numeric',
+            'agen_kurir' => 'required',
+        ], $messages);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Validasi untuk SHOP dan FOOD
+        if ($req->nama_layanan == 'SHOP' || $req->nama_layanan == 'FOOD') {
+            $validator_2 = \Validator::make($req->all(), [
+                'nama_toko' => 'required',
+            ], $messages);
+
+            if ($validator_2->fails()) {
+                header('Content-Type: application/json');
+                http_response_code(422);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nama Toko/Resto Harus Diisi',
+                    'errors' => $validator_2->errors()
+                ], 422);
+            }
+        }
+
+        // Validasi pelanggan baru
+        if ($req->no_hp_pelanggan == '-' && $req->no_hp_pelanggan_baru == '') {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'No HP Pelanggan Harus Diisi'
+            ], 422);
+        }
+
+        // Get kurir data from no_hp
+        $getKurir = DB::table('rb_sopir as a')
+            ->select('a.*','b.nama_lengkap')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+            ->where('b.no_hp', $req->no_hp)
+            ->first();
+
+        if (!$getKurir) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Data kurir tidak ditemukan'
+            ], 404);
+        }
+
+        // Hitung potongan komisi
+        // if ($getKurir->total_komisi != 0) {
+        //     $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+        // } else {
+        //     $potonganKomisi = $req->biaya_antar * ($this->getConfig('fee_kurir_total') / 100);
+        // }
+
+            $reffKonsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp_pelanggan ?? $req->no_hp)->first()->referral_id ?? '';
+            if ($getKurir->type_kurir == 'khusus') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_khusus_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_khusus') / 100);
+                    }
+                }
+            } else if ($getKurir->type_kurir == 'inti') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_inti_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_inti') / 100);
+                    }
+                }
+            } else {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_umum_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_umum') / 100);
+                    }
+                }
+            }
+
+        try {
+            DB::beginTransaction();
+            Log::info($req->all());
+            $id_pemesan = null;
+
+            // Handle pelanggan
+            $pemesan = DB::table('rb_konsumen')->where('no_hp', $req->no_hp_pelanggan ?? $req->no_hp)->first();
+            
+            if (!$pemesan && $req->btn_simpan == 'create') {
+                // Buat pelanggan baru
+                $dtKonsumen = [
+                    'username' => $req->no_hp_pelanggan_baru,
+                    'nama_lengkap' => $req->nama_pelanggan,
+                    'email' => '-',
+                    'jenis_kelamin' => 'Laki-laki',
+                    'tanggal_lahir' => date('Y-m-d'),
+                    'tempat_lahir' => '-',
+                    'alamat_lengkap' => $req->alamat_tujuan,
+                    'kecamatan_id' => '0',
+                    'kota_id' => '0',
+                    'provinsi_id' => '0',
+                    'no_hp' => $req->no_hp_pelanggan_baru,
+                    'foto' => '-',
+                    'tanggal_daftar' => date('Y-m-d'),
+                    'token' => 'N',
+                    'referral_id' => $getKurir->id_konsumen,
+                    'verifikasi' => 'N',
+                    'password' => rand(1111111111, 9999999999),
+                ];
+
+                $id_pemesan = DB::table('rb_konsumen')->insertGetId($dtKonsumen);
+            } else {
+                $id_pemesan = $pemesan->id_konsumen;
+            }
+            
+            // Prepare data transaksi
+            $dtInsert = [
+                'source' => 'MANUAL_KURIR',
+                'tarif' => $req->biaya_antar,
+                'id_agen' => $req->agen_kurir,
+                'id_pemesan' => $id_pemesan,
+                'alamat_jemput' => $req->alamat_penjemputan,
+                'titik_jemput' => $req->titik_jemput,
+                'alamat_antar' => $req->alamat_tujuan,
+                'titik_antar' => $req->titik_antar,
+                'jenis_layanan' => $req->nama_layanan,
+                'service' => $req->nama_layanan,
+                'metode_pembayaran' => 'CASH',
+                'pemberi_barang' => $req->nama_toko ?? '',
+                'tanggal_order' => $req->tanggal_order ?? date('Y-m-d H:i:s'),
+            ];
+
+            // Handle different actions
+            if ($req->btn_simpan == 'create') {
+                // Cek saldo kurir
+                $getSaldo = $this->getSaldoKurir($getKurir->id_konsumen);
+
+                // CEK SALDO
+                // if ($getSaldo < $potonganKomisi) {
+                //     DB::rollBack();
+                //     header('Content-Type: application/json');
+                //     http_response_code(400);
+                //     return response()->json([
+                //         'success' => false,
+                //         'message' => 'Maaf Saldo Kurang, Silahkan Top Up',
+                //         'saldo' => $getSaldo,
+                //         'potongan_komisi' => $potonganKomisi
+                //     ], 400);
+                // }
+
+                $dtInsert['id_sopir'] = $getKurir->id_sopir;
+                $dtInsert['kode_order'] = time() . rand(00, 99);
+
+                if ($getKurir->agen == 1) {
+                    $dtInsert['status'] = 'FINISH';
+                } else {
+                    $dtInsert['status'] = 'FINISH';
+                    // potong proses approval agent
+                }
+                
+                Log::info($req->is_favorite);
+                Log::info($getKurir->id_konsumen .' || '. $id_pemesan);
+                
+                $id_transaksi = DB::table('kurir_order')->insertGetId($dtInsert);
+
+                if ($req->is_favorite) {
+                    $cekExist = DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->first();
+                        
+                    if ($cekExist) {
+                        Log::info('EXIST');
+                        if ($req->is_favorite == false) {
+                            Log::info('HAPUS FAVORITE');
+                            DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->delete();
+                        } else {
+                            Log::info('EXIST NOT ACTION');
+                        }
+                    } else {
+                        Log::info('NOT EXIST');
+                        if ($req->is_favorite == true) {
+                            Log::info('INSERT');
+                            DB::table('rb_konsumen_favorite')
+                            ->insert([
+                                'id_user' => $getKurir->id_konsumen,
+                                'id_konsumen' => $id_pemesan
+                            ]);
+                        } else {
+                            Log::info('NOT EXIST NO ACTION');
+                        }
+                    }
+                } else {
+                    $cekExist = DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->first();
+                    if($cekExist){
+                        DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->delete();
+                    }
+                    
+                }
+
+                if ($getKurir->agen == 1) {
+                    
+                    DB::table('rb_wallet_users')->insert([
+                        'id_konsumen' => $getKurir->id_konsumen,
+                        'amount' => $potonganKomisi,
+                        'trx_type' => 'debit',
+                        'note' => 'Potongan admin kurir transaksi manual',
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'source' => 'KURIR',
+                        'source_id' => $id_transaksi,
+                        'type' => 'KOMISI',
+                    ]);
+
+                    // Bagi komisi
+                    $bagiKomisi = $this->pembagianKomisiKurir($potonganKomisi, $getKurir->id_sopir, $id_transaksi);
+                    // $dtNavigate = [
+                    //     'transaction_id' => (string) $id_transaksi,
+                    //     'navigate_to' => 'live-order'
+                    // ];
+                    // fcm_notify(
+                    //     $req->agen_kurir,
+                    //     "Perlu Verifikasi",
+                    //     "Halo kak  silahkan cek ada transaksi yang perlu diverifikasi",
+                    //     $dtNavigate
+                    // );
+                    
+                    // notifKonsumenFinishOrder($id_transaksi);
+                } else {
+                    $dtNavigate = [
+                        'transaction_id' => (string) $id_transaksi,
+                        'navigate_to' => 'live-order'
+                    ];
+                    fcm_notify(
+                        $req->agen_kurir,
+                        "Perlu Verifikasi",
+                        "Halo kak ".$getKurir->nama_lengkap.", silahkan cek ada transaksi yang perlu diverifikasi",
+                        $dtNavigate
+                    );
+                }
+
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Sukses Menyimpan Transaksi Manual',
+                    'data' => [
+                        'id_transaksi' => $id_transaksi,
+                        'kode_order' => $dtInsert['kode_order']
+                    ]
+                ]);
+
+            } elseif ($req->btn_simpan == 'update') {
+                
+                DB::beginTransaction();
+                try {
+                    $id_transaksi = $req->id_transaksi;
+                    
+                    // 1. Pastikan transaksi ada & dalam batas 48 jam
+                    $transaksi = DB::table('kurir_order')->where('id', $id_transaksi)->first();
+                    if (!$transaksi) {
+                        DB::rollBack();
+                        return response()->json(['success' => false, 'message' => 'ID transaksi tidak ditemukan']);
+                    }
+                    $selisihJam = (time() - strtotime($transaksi->tanggal_order)) / 3600;
+                    if ($selisihJam > 48) {
+                        DB::rollBack();
+                        return response()->json(['success' => false, 'message' => 'Transaksi sudah melewati batas waktu edit (48 jam)']);
+                    }
+
+                    // 2. Ambil data kurir untuk hitung ulang komisi
+                    $getKurir = DB::table('rb_sopir')->where('id_sopir', $transaksi->id_sopir)->first();
+
+                    // 3. Hapus semua wallet entry lama milik transaksi ini
+                    DB::table('rb_wallet_users')
+                        ->where('source', 'KURIR')
+                        ->where('source_id', $id_transaksi)
+                        ->delete();
+
+                    // 4. Update data transaksi
+                    $biayaAntar = $req->biaya_antar;
+                    $titikJemput = $req->titik_jemput ?? '';
+                    $titikAntar = $req->titik_antar ?? '';
+                    $namaLayanan = $req->nama_layanan;
+                    $agenKurir = $req->agen_kurir;
+                    $tanggalOrder = $req->tanggal_order;
+                    $peritaBarang = $req->nama_toko ?? $transaksi->pemberi_barang ?? '';
+                    
+                    Log::info('About to update transaction ID: ' . $id_transaksi);
+                    
+                    $affected = DB::table('kurir_order')
+                        ->where('id', $id_transaksi)
+                        ->update([
+                            'tarif' => $biayaAntar,
+                            'alamat_jemput' => $req->alamat_penjemputan,
+                            'alamat_antar' => $req->alamat_tujuan,
+                            'titik_jemput' => $titikJemput,
+                            'titik_antar' => $titikAntar,
+                            'jenis_layanan' => $namaLayanan,
+                            'service' => $namaLayanan,
+                            'id_agen' => $agenKurir,
+                            'tanggal_order' => $tanggalOrder,
+                            'pemberi_barang' => $peritaBarang,
+                            'updated_at' => DB::raw('NOW()')
+                        ]);
+
+                    Log::info('Update executed for transaction ID: ' . $id_transaksi . ' (rows affected: ' . $affected . ')');
+                    
+                    // Clear any caches related to this transaction
+                    // Forget cache key jika ada
+                    if (Cache::has('kurir_order_' . $id_transaksi)) {
+                        Cache::forget('kurir_order_' . $id_transaksi);
+                    }
+                    if (Cache::has('transaksi_' . $id_transaksi)) {
+                        Cache::forget('transaksi_' . $id_transaksi);
+                    }
+
+                    try {
+                        // 5. Hitung ulang komisi dari tarif baru
+                        if ($getKurir) {
+                            // $feeAdmin      = $this->getConfig('fee_admin_transaksi_manual'); // persen fee admin
+                            // $potonganKomisi = $biayaAntar * ($feeAdmin / 100);
+
+                            // Insert potongan kurir (debit)
+                            // DB::table('rb_wallet_users')->insert([
+                            //     'id_konsumen' => $getKurir->id_konsumen,
+                            //     'amount'      => $potonganKomisi,
+                            //     'trx_type'    => 'debit',
+                            //     'note'        => 'Potongan admin kurir transaksi manual (direvisi)',
+                            //     'created_at'  => date('Y-m-d H:i:s'),
+                            //     'source'      => 'KURIR',
+                            //     'source_id'   => $id_transaksi,
+                            //     'type'        => 'KOMISI',
+                            // ]);
+
+                            // Bagi komisi — tanpa notifikasi ($sendNotification = false)
+                            // $this->pembagianKomisiKurir($potonganKomisi, $getKurir->id_sopir, $id_transaksi);
+                        }
+                    } catch (\Exception $e) {
+                        Log::error('Recalculate komisi error (update transaksi ' . $id_transaksi . '): ' . $e->getMessage());
+                    }
+                    
+
+                    DB::commit();
+                    Log::info('Transaksi berhasil diperbarui');
+                    header('Content-Type: application/json');
+                    return response()->json(['success' => true, 'message' => 'Transaksi berhasil diperbarui']);
+
+                } catch (\Exception $e) {
+                    DB::rollBack();
+                    Log::error('Update transaksi manual error: ' . $e->getMessage());
+                    header('Content-Type: application/json');
+                    http_response_code(500);
+                    return response()->json(['success' => false, 'message' => 'Terjadi kesalahan saat memperbarui transaksi'], 500);
+                }
+
+            } elseif ($req->btn_simpan == 'revisi') {
+
+                $dtInsert['status'] = 'RETURN';
+                $dtInsert['alasan_pembatalan'] = $req->alasan_revisi;
+                DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Transaksi dikembalikan untuk revisi',
+                    'data' => ['id_transaksi' => $req->id_transaksi]
+                ]);
+
+            } elseif ($req->btn_simpan == 'delete') {
+
+                $dtInsert['status'] = 'CANCEL';
+                $dtInsert['alasan_pembatalan'] = $req->alasan_pembatalan;
+                DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Transaksi dibatalkan',
+                    'data' => ['id_transaksi' => $req->id_transaksi]
+                ]);
+
+            } elseif ($req->btn_simpan == 'approve') {
+
+                if ($req->text_approve == 'SETUJU') {
+                    $dtInsert['status'] = 'FINISH';
+                    DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+
+                    $getKurirOrang = DB::table('rb_sopir as a')
+                        ->select('a.*', 'b.id_konsumen')
+                        ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+                        ->where('a.id_sopir', $req->id_sopir)
+                        ->first();
+
+                    
+
+                    // Potong saldo untuk komisi
+                    // $dtPotongan = [
+                    //     'id_konsumen' => $getKurirOrang->id_konsumen,
+                    //     'nominal' => $potonganKomisi,
+                    //     'id_rekening' => 0,
+                    //     'withdraw_fee' => 0,
+                    //     'status' => 'Sukses',
+                    //     'transaksi' => 'kredit',
+                    //     'keterangan' => 'Potongan admin kurir transaksi manual',
+                    //     'akun' => 'sopir',
+                    //     'waktu_pendapatan' => date('Y-m-d H:i:s'),
+                    // ];
+                    // DB::table('rb_pendapatan_kurir')->insert($dtPotongan);
+
+                    DB::table('rb_wallet_users')->insert([
+                        'id_konsumen' => $getKurirOrang->id_konsumen,
+                        'amount' => $potonganKomisi,
+                        'trx_type' => 'debit',
+                        'note' => 'Potongan admin kurir transaksi manual',
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'source' => 'KURIR',
+                        'source_id' => $req->id_transaksi,
+                        'type' => 'KOMISI',
+                    ]);
+
+                    // Bagi komisi
+                    $bagiKomisi = $this->pembagianKomisiKurir($potonganKomisi, $req->id_sopir, $req->id_transaksi);
+
+                    // notifKonsumenFinishOrder($req->id_transaksi);
+                    
+                    if ($bagiKomisi) {
+                        DB::commit();
+                        header('Content-Type: application/json');
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Sukses Approve Transaksi Manual, Komisi DiBagikan',
+                            'data' => ['id_transaksi' => $req->id_transaksi]
+                        ]);
+                    } else {
+                        DB::rollBack();
+                        header('Content-Type: application/json');
+                        http_response_code(500);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Gagal Menghitung Komisi'
+                        ], 500);
+                    }
+
+                } else {
+                    DB::rollBack();
+                    header('Content-Type: application/json');
+                    http_response_code(400);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Kata Yang Dimasukan Salah'
+                    ], 400);
+                }
+            }
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * List transaksi manual untuk agen/kurir (internal)
+     * Request params:
+     * - no_hp: string (required) - nomor hp agen/kurir
+     * - status: string (optional) - filter by status
+     * - tanggal_from: date (optional) - format YYYY-MM-DD
+     * - tanggal_to: date (optional)
+     * - limit: int (optional)
+     * - page: int (optional, default 1)
+     */
+    public function listTransaksi(Request $req)
+    {
+        Log::info($req->all());
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $getAgen = DB::table('rb_sopir as a')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+            ->select('a.*', 'b.no_hp')
+            ->where('b.no_hp', $req->no_hp)
+            ->first();
+
+        if (!$getAgen) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Agen/Kurir tidak ditemukan'
+            ], 404);
+        }
+
+        if ($req->input('service_type') == 'pasca_order') {
+            $type = ['MANUAL_KURIR'];
+        } else if ($req->input('service_type') == 'live_order') {
+            $type = ['LIVE_ORDER'];
+        } else {
+            $type = ['LIVE_ORDER', 'MANUAL_KURIR'];
+        }
+
+
+        $query = DB::table('kurir_order as a')
+            ->leftJoin('rb_konsumen as p', 'p.id_konsumen', 'a.id_pemesan')
+            ->leftJoin('rb_sopir as s', 's.id_sopir', 'a.id_sopir')
+            ->leftJoin('rb_konsumen as p_agent', 'p_agent.id_konsumen', 'a.id_agen')
+            ->leftJoin('rb_konsumen as pk', 'pk.id_konsumen', 's.id_konsumen')
+            ->select('a.*', 's.id_konsumen as id_kurir', 'p.nama_lengkap as nama_pemesan', 'p.no_hp as no_hp_pemesan', 'p_agent.nama_lengkap as nama_agen', 'p_agent.no_hp as no_hp_agen', 'pk.nama_lengkap as nama_kurir', 'pk.no_hp as no_hp_kurir');
+
+        // only manual kurir entries and belonging to this agent
+        $query->whereIn('a.source', $type)
+              ->where('a.id_sopir', $getAgen->id_sopir);
+
+        if ($req->filled('status')) {
+            $query->where('a.status', $req->status);
+        }
+
+        if ($req->filled('start_date')) {
+            $query->whereDate('a.tanggal_order', '>=', $req->start_date.' 00:00:00');
+        }
+        if ($req->filled('end_date')) {
+            $query->whereDate('a.tanggal_order', '<=', $req->end_date.' 23:59:59');
+        }
+
+        $query->orderBy('a.tanggal_order', 'desc');
+
+        $limit = (int)($req->limit ?? 0);
+        $page = max(1, (int)($req->page ?? 1));
+
+        if ($limit > 0) {
+            $offset = ($page - 1) * $limit;
+            $total = $query->count();
+            $data = $query->offset($offset)->limit($limit)->get();
+        } else {
+            $data = $query->get();
+            $total = $data->count();
+        }
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'total' => $total,
+            'message' => 'Daftar transaksi manual berhasil diambil'
+        ]);
+    }
+
+    /**
+     * List transaksi manual untuk konsumen (pelanggan)
+     * Request params:
+     * - no_hp: string (required) - nomor hp pelanggan
+     * - status: string (optional)
+     * - tanggal_from: date (optional) - format YYYY-MM-DD
+     * - tanggal_to: date (optional)
+     * - start_date: date (optional) - alias for tanggal_from
+     * - end_date: date (optional) - alias for tanggal_to
+     * - limit: int (optional)
+     * - page: int (optional, default 1)
+     */
+    public function listTransaksiKonsumen(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+        if (!$konsumen) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Konsumen tidak ditemukan'
+            ], 404);
+        }
+
+        $query = DB::table('kurir_order as a')
+            ->leftJoin('rb_konsumen as s', 's.id_konsumen', 'a.id_pemesan')
+            ->select('a.*');
+
+        // $query->where('a.source', 'MANUAL_KURIR')
+              $query->where('a.id_pemesan', $konsumen->id_konsumen);
+
+        if ($req->filled('status')) {
+            $query->where('a.status', $req->status);
+        }
+
+        // Support both old and new parameter names
+        $tanggalFrom = $req->filled('start_date') ? $req->start_date : ($req->filled('tanggal_from') ? $req->tanggal_from : null);
+        $tanggalTo = $req->filled('end_date') ? $req->end_date : ($req->filled('tanggal_to') ? $req->tanggal_to : null);
+
+        if ($tanggalFrom) {
+            $query->whereDate('a.tanggal_order', '>=', $tanggalFrom);
+        }
+        if ($tanggalTo) {
+            $query->whereDate('a.tanggal_order', '<=', $tanggalTo);
+        }
+
+        $query->orderBy('a.tanggal_order', 'desc');
+
+        $limit = (int)($req->limit ?? 0);
+        $page = max(1, (int)($req->page ?? 1));
+
+        if ($limit > 0) {
+            $offset = ($page - 1) * $limit;
+            $total = $query->count();
+            $data = $query->offset($offset)->limit($limit)->get();
+        } else {
+            $data = $query->get();
+            $total = $data->count();
+        }
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'total' => $total,
+            'message' => 'Daftar transaksi manual konsumen berhasil diambil'
+        ]);
+    }
+
+    /**
+     * Get downline data from rb_konsumen where referral_id = id_konsumen
+     * 
+     * Request params:
+     * - id_konsumen: int (required)
+     * 
+     * Response:
+     * {
+     *   success: true,
+     *   data: [{id_konsumen, nama_lengkap, no_hp, ...}],
+     *   message: "...",
+     *   total: int
+     * }
+     */
+    public function getDownline(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'id_konsumen' => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $downline = DB::table('rb_konsumen')
+            ->where('referral_id', $req->id_konsumen)
+            ->get();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $downline,
+            'message' => 'Data downline berhasil diambil',
+            'total' => $downline->count()
+        ]);
+    }
+
+    public function searchKonsumen(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'keyword' => 'required|string',
+        ]);
+
+        $id_konsumen = $req->id_konsumen;
+
+        Log::info('Search Konsumen', $req->all());
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $query = $req->keyword;
+        $results = DB::table('rb_konsumen as a')
+            ->select('a.*', 'c.koordinator_kota', 'c.koordinator_kecamatan')
+            // ->leftJoin('rb_konsumen as b', 'b.kota_id', 'a.kota_id')
+            ->leftJoin('rb_konsumen as b', function($join) use ($id_konsumen) {
+                $join->where('b.id_konsumen', $id_konsumen);
+            })
+            ->leftJoin('rb_sopir as c', 'c.id_konsumen', 'b.id_konsumen')
+            ->where('a.is_show', '1')
+            ->where('a.nama_lengkap', 'like', "%$query%")
+            ->orWhere('a.no_hp', 'like', "%$query%")
+            ->get();
+
+            
+
+        foreach ($results as $row) {
+            $row->allow_edit = ($row->referral_id == $id_konsumen) ? true : (($row->koordinator_kota == 1) ? true : (($row->koordinator_kecamatan == 1) ? true : false));
+            $row->allow_delete = ($row->referral_id == $id_konsumen) ? true : (($row->koordinator_kota == 1) ? true : (($row->koordinator_kecamatan == 1) ? true : false));
+            $row->is_downline = ($row->referral_id == $id_konsumen) ? true : false;
+        }
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $results,
+            'message' => 'Pencarian konsumen berhasil',
+            'total' => $results->count()
+        ]);
+    }
+
+    public function getUserCity(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'id_konsumen' => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $downlineCity = DB::table('rb_konsumen as a')
+            ->select('a.*', 'c.koordinator_kota', 'c.koordinator_kecamatan')
+            ->leftJoin('rb_konsumen as b', 'b.kota_id', 'a.kota_id')
+            ->leftJoin('rb_sopir as c', 'c.id_konsumen', 'b.id_konsumen')
+            ->where('a.is_show', '1')
+            ->where('a.referral_id', '!=', $req->id_konsumen)
+            ->where('b.id_konsumen', $req->id_konsumen)
+            ->where('a.id_konsumen', '!=', $req->id_konsumen);
+        
+        $downlineRefferal = DB::table('rb_konsumen as a')
+            ->select('a.*', 'c.koordinator_kota', 'c.koordinator_kecamatan')
+            ->leftJoin('rb_sopir as c', 'c.id_konsumen', 'a.id_konsumen')
+            ->where('a.is_show', '1')
+            ->where('a.referral_id', $req->id_konsumen);
+
+        $downline = $downlineCity->union($downlineRefferal)
+            ->distinct('id_konsumen')
+            ->orderBy('nama_lengkap', 'asc')
+            ->get();
+        
+        foreach ($downline as $row) {
+            $row->allow_edit = ($row->referral_id == $req->id_konsumen) ? true : (($row->koordinator_kota == 1) ? true : (($row->koordinator_kecamatan == 1) ? true : false));
+            $row->allow_delete = ($row->referral_id == $req->id_konsumen) ? true : (($row->koordinator_kota == 1) ? true : (($row->koordinator_kecamatan == 1) ? true : false));
+            $row->is_downline = ($row->referral_id == $req->id_konsumen) ? true : false;
+        }
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $downline,
+            'message' => 'Data downline berhasil diambil',
+            'total' => $downline->count()
+        ]);
+    }
+
+    /**
+     * Check user by phone number
+     * Request params:
+     * - no_hp: string (required)
+     *
+     * Response:
+     * - 422 on validation error
+     * - 404 when user not found
+     * - 200 with user data when found
+     */
+    public function checkUserByPhone(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Normalize phone using existing helper
+        $cleanNoHp = $this->cleanPhoneNumber($req->no_hp);
+
+        $user = DB::table('rb_konsumen')->where('no_hp', $cleanNoHp)->first();
+
+        header('Content-Type: application/json');
+
+        if (!$user) {
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'User tidak ditemukan'
+            ], 404);
+        }
+
+        // Normalize any 0 foreign keys for consistency
+        $this->normalizeKonsumen($user);
+
+        return response()->json([
+            'success' => true,
+            'data' => $user,
+            'message' => 'User ditemukan'
+        ]);
+    }
+
+    /**
+     * Create transfer request between users
+     * Request params:
+     * - no_hp_sender: string (required)
+     * - no_hp_receiver: string (required)
+     * - amount: numeric (required, min 1)
+     *
+     * Response:
+     * - 422 on validation error
+     * - 404 when sender/receiver not found
+     * - 400 when insufficient balance
+     * - 200 on success
+     */
+    public function createTransferRequest(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp_sender' => 'required',
+            'no_hp_receiver' => 'required',
+            'amount' => 'required|numeric|min:1',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Normalize phones
+        $cleanSenderHp = $this->cleanPhoneNumber($req->no_hp_sender);
+        $cleanReceiverHp = $this->cleanPhoneNumber($req->no_hp_receiver);
+
+        // Get sender
+        $sender = DB::table('rb_konsumen')->where('no_hp', $cleanSenderHp)->first();
+        if (!$sender) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Sender tidak ditemukan'
+            ], 404);
+        }
+
+        // Get receiver
+        $receiver = DB::table('rb_konsumen')->where('no_hp', $cleanReceiverHp)->first();
+        if (!$receiver) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Receiver tidak ditemukan'
+            ], 404);
+        }
+
+        // Check sender balance
+        $saldoSender = DB::table('rb_wallet_users')
+            ->where('id_konsumen', $sender->id_konsumen)
+            ->selectRaw('SUM(CASE WHEN trx_type = ? THEN amount WHEN trx_type = ? THEN -amount ELSE 0 END) as saldo', ['credit', 'debit'])
+            ->first()->saldo ?? 0;
+
+        if ($saldoSender < $req->amount) {
+            header('Content-Type: application/json');
+            http_response_code(400);
+            return response()->json([
+                'success' => false,
+                'message' => 'Saldo tidak cukup',
+                'saldo' => $saldoSender
+            ], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Debit sender
+            DB::table('rb_wallet_users')->insert([
+                'id_konsumen' => $sender->id_konsumen,
+                'amount' => $req->amount,
+                'trx_type' => 'debit',
+                'note' => 'Transfer ke ' . $cleanReceiverHp,
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            // Credit receiver
+            DB::table('rb_wallet_users')->insert([
+                'id_konsumen' => $receiver->id_konsumen,
+                'amount' => $req->amount,
+                'trx_type' => 'credit',
+                'note' => 'Transfer dari ' . $cleanSenderHp,
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            DB::commit();
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Transfer berhasil'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getPendingWithdrawRequestsOlderThan7Days()
+    {
+        
+        $data = DB::table('rb_wallet_requests')
+            ->where('status', 'pending')
+            ->where('req_type', 'withdraw')
+            ->where('created_at', '<', DB::raw('DATE_SUB(NOW(), INTERVAL 7 DAY)'))
+            ->update(['status'=>'rejected']);
+        return ['success' => true, 'data' => $data];
+    }
+
+
+    public function listLiveOrder(Request $req)
+    {
+        Log::info($req->all());
+        if ($req->id) {
+            $validator = \Validator::make($req->all(), [
+                'id' => 'required',
+            ]);
+        } else {
+            $validator = \Validator::make($req->all(), [
+                'no_hp' => 'required',
+            ]);
+        }
+        
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $getAgen = DB::table('rb_sopir as a')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+            ->select('a.*', 'b.no_hp')
+            ->where('b.no_hp', $req->no_hp)
+            ->first();
+
+        if (!$getAgen) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Agen/Kurir tidak ditemukan'
+            ], 404);
+        }
+
+        $query = DB::table('kurir_order as a')
+            ->leftJoin('rb_konsumen as p', 'p.id_konsumen', 'a.id_pemesan')
+            ->leftJoin('rb_konsumen as p_agent', 'p_agent.id_konsumen', 'a.id_agen')
+            ->leftJoin('rb_sopir as s', 's.id_sopir', 'a.id_sopir')
+            ->leftJoin('rb_konsumen as pk', 'pk.id_konsumen', 's.id_konsumen')
+            ->select('a.*', 's.id_konsumen as id_kurir', 'p.nama_lengkap as nama_pemesan', 'p.no_hp as no_hp_pemesan', 'p_agent.nama_lengkap as nama_agen', 'p_agent.no_hp as no_hp_agen', 'pk.nama_lengkap as nama_kurir', 'pk.no_hp as no_hp_kurir');
+
+        if ($req->id) {
+            $query->where('a.id', $req->id);
+        } else {
+
+        
+            // only manual kurir entries and belonging to this agent
+            $query->where('a.source', 'LIVE_ORDER')
+                ->where('a.id_agen', $getAgen->id_konsumen);
+
+            if ($req->filled('status')) {
+                $query->where('a.status', $req->status);
+            }
+
+            if ($req->filled('start_date')) {
+                $query->whereDate('a.tanggal_order', '>=', $req->start_date);
+            }
+            if ($req->filled('end_date')) {
+                $query->whereDate('a.tanggal_order', '<=', $req->end_date);
+            }
+
+        }
+
+        $query->orderBy('a.tanggal_order', 'desc');
+
+        $limit = (int)($req->limit ?? 0);
+        $page = max(1, (int)($req->page ?? 1));
+
+        if ($limit > 0) {
+            $offset = ($page - 1) * $limit;
+            $total = $query->count();
+            $data = $query->offset($offset)->limit($limit)->get();
+        } else {
+            $data = $query->get();
+            $total = $data->count();
+        }
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'total' => $total,
+            'message' => 'Daftar transaksi manual berhasil diambil'
+        ]);
+    }
+
+
+    public function saveLiveOrder(Request $req)
+    {
+        
+        $messages = [
+            'no_hp.required' => 'No HP Kurir Harus Diisi',
+            'nama_layanan.required' => 'Nama Layanan Harus Dipilih',
+            'alamat_penjemputan.required' => 'Alamat Penjemputan Harus Diisi',
+            'alamat_tujuan.required' => 'Alamat Tujuan Harus Diisi',
+            'biaya_antar.required' => 'Biaya Antar Harus Diisi',
+            'biaya_antar.numeric' => 'Biaya Antar Harus Angka',
+            'nama_toko.required' => 'Nama Toko/Resto Harus Diisi',
+            'agen_kurir.required' => 'Agen Kurir Harus Diisi',
+            'no_hp_pelanggan_baru.required' => 'No HP Pelanggan Harus Diisi',
+            'no_hp_pelanggan_baru.numeric' => 'No HP Pelanggan Harus Angka Saja',
+        ];
+
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'nama_layanan' => 'required',
+            'alamat_penjemputan' => 'required',
+            'alamat_tujuan' => 'required',
+            'biaya_antar' => 'required|numeric',
+            'agen_kurir' => 'required',
+        ], $messages);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Validasi untuk SHOP dan FOOD
+        if ($req->nama_layanan == 'SHOP' || $req->nama_layanan == 'FOOD') {
+            $validator_2 = \Validator::make($req->all(), [
+                'nama_toko' => 'required',
+            ], $messages);
+
+            if ($validator_2->fails()) {
+                header('Content-Type: application/json');
+                http_response_code(422);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nama Toko/Resto Harus Diisi',
+                    'errors' => $validator_2->errors()
+                ], 422);
+            }
+        }
+
+        // Validasi pelanggan baru
+        if ($req->no_hp_pelanggan == '-' && $req->no_hp_pelanggan_baru == '') {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'No HP Pelanggan Harus Diisi'
+            ], 422);
+        }
+
+        // Get kurir data from no_hp
+        $getKurir = DB::table('rb_sopir as a')
+            ->select('a.*')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+            ->where('b.no_hp', $req->no_hp)
+            ->first();
+
+        if (!$getKurir) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Data kurir tidak ditemukan'
+            ], 404);
+        }
+
+        // Hitung potongan komisi
+        // if ($getKurir->total_komisi != 0) {
+        //     $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+        // } else {
+        //     $potonganKomisi = $req->biaya_antar * ($this->getConfig('fee_kurir_total') / 100);
+        // }
+
+            $reffKonsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp_pelanggan ?? $req->no_hp_pelanggan_baru)->first()->referral_id ?? '';
+            if ($getKurir->type_kurir == 'khusus') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_khusus_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_khusus') / 100);
+                    }
+                }
+            } else if ($getKurir->type_kurir == 'inti') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_inti_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_inti') / 100);
+                    }
+                }
+            } else {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_umum_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_umum') / 100);
+                    }
+                }
+            }
+
+        
+
+        
+
+        try {
+            DB::beginTransaction();
+
+            $id_pemesan = null;
+
+            // Handle pelanggan
+            $pemesan = DB::table('rb_konsumen')->where('no_hp', $req->no_hp_pelanggan_baru)->first();
+            Log::info('disini');
+            if (!$pemesan && $req->btn_simpan == 'create') {
+                // Buat pelanggan baru
+                Log::info('disini create');
+                $dtKonsumen = [
+                    'username' => $req->no_hp_pelanggan_baru,
+                    'nama_lengkap' => $req->nama_pelanggan,
+                    'email' => '-',
+                    'jenis_kelamin' => 'Laki-laki',
+                    'tanggal_lahir' => date('Y-m-d'),
+                    'tempat_lahir' => '-',
+                    'alamat_lengkap' => $req->alamat_tujuan,
+                    'kecamatan_id' => '0',
+                    'kota_id' => '0',
+                    'provinsi_id' => '0',
+                    'no_hp' => $req->no_hp_pelanggan_baru,
+                    'foto' => '-',
+                    'tanggal_daftar' => date('Y-m-d'),
+                    'token' => 'N',
+                    'referral_id' => $getKurir->id_konsumen,
+                    'verifikasi' => 'N',
+                    'password' => rand(1111111111, 9999999999),
+                ];
+
+                $id_pemesan = DB::table('rb_konsumen')->insertGetId($dtKonsumen);
+            } else {
+                // dd($pemesan);
+                Log::info('disini exist');
+                $id_pemesan = $pemesan->id_konsumen;
+                Log::info($id_pemesan);
+            }
+
+            // Prepare data transaksi
+            // Source should be LIVE_ORDER for live order endpoint
+            $dtInsert = [
+                'source' => 'LIVE_ORDER',
+                'tarif' => $req->biaya_antar,
+                'id_agen' => $req->agen_kurir,
+                'id_pemesan' => $id_pemesan,
+                'alamat_jemput' => $req->alamat_penjemputan,
+                'titik_jemput' => $req->link_maps_penjemputan ?? '',
+                'alamat_antar' => $req->alamat_tujuan,
+                'titik_antar' => $req->link_maps_tujuan ?? '',
+                'jenis_layanan' => $req->nama_layanan,
+                'metode_pembayaran' => 'CASH',
+                'pemberi_barang' => $req->nama_toko ?? '',
+                'tanggal_order' => ($req->tanggal_order ? $req->tanggal_order . ' ' . date('H:i:s') : date('Y-m-d H:i:s')),
+            ];
+            Log::info(json_encode($dtInsert));
+            // Handle different actions
+            
+            if ($req->btn_simpan == 'create') {
+                // Jika agen_kurir = DEFAULT_AGEN maka gunakan id_konsumen kurir sebagai agen
+                if (isset($req->agen_kurir) && $req->agen_kurir === 'DEFAULT_AGEN') {
+                    $dtInsert['id_agen'] = $getKurir->id_konsumen;
+                }
+                // Cek saldo kurir
+                $getSaldo = $this->getSaldoKurir($getKurir->id_konsumen);
+
+                // CEK SALDO
+                // if ($getSaldo < $potonganKomisi) {
+                //     DB::rollBack();
+                //     header('Content-Type: application/json');
+                //     http_response_code(400);
+                //     return response()->json([
+                //         'success' => false,
+                //         'message' => 'Maaf Saldo Kurang, Silahkan Top Up',
+                //         'saldo' => $getSaldo,
+                //         'potongan_komisi' => $potonganKomisi
+                //     ], 400);
+                // }
+
+                
+                $dtInsert['kode_order'] = time() . rand(00, 99);
+                $dtInsert['status'] = 'SEARCH';
+                
+
+                // Jika ada produk pada request, simpan sebagai penjualan + detail
+                if ($req->nama_layanan == 'SHOP' || $req->nama_layanan == 'FOOD') {
+                    $produk = json_decode($req->produk, true);
+                    try {
+                        // kode_transaksi 'LVO-yyyymmddhhiiss'
+                        $kodeTrans = 'LVO-' . date('YmdHis', strtotime($dtInsert['tanggal_order']));
+
+                        $penjualan = [
+                            'kode_transaksi' => $kodeTrans,
+                            'id_pembeli' => $id_pemesan,
+                            'id_penjual' => 0,
+                            'status_pembeli' => 'konsumen',
+                            'status_penjual' => 'reseller',
+                            'kurir' => '-',
+                            'service' => '-',
+                            'ongkir' => $req->biaya_antar,
+                            'waktu_transaksi' => $dtInsert['tanggal_order'],
+                            'proses' => 3,
+                        ];
+
+                        $id_penjualan = DB::table('rb_penjualan')->insertGetId($penjualan);
+
+                        $dtInsert['id_penjualan'] = $id_penjualan;
+
+                        foreach ($produk as $p) {
+                            // generate a pseudo product id using random number to avoid collisions
+                            $id_produk = mt_rand(1000000, 9999999);
+                            $jumlah = isset($p['qty']) ? (int)$p['qty'] : (int)($p->qty ?? 0);
+                            $harga_jual = isset($p['harga']) ? (float)$p['harga'] : (float)($p->harga ?? 0);
+                            $satuan = isset($p['satuan']) ? $p['satuan'] : ($p->satuan ?? '');
+                            $nama_barang = isset($p['nama_barang']) ? $p['nama_barang'] : ($p->nama_barang ?? '');
+
+                            $detail = [
+                                'id_penjualan' => $id_penjualan,
+                                'id_produk' => $id_produk,
+                                'jumlah' => $jumlah,
+                                'harga_jual' => $harga_jual,
+                                'fee_produk_end' => 0,
+                                'satuan' => $satuan,
+                                'markup_produk' => 0,
+                                'nama_barang_insidential' => $nama_barang,
+                                'harga_modal' => 0,
+                            ];
+
+                            DB::table('rb_penjualan_detail')->insert($detail);
+                        }
+
+                    } catch (\Exception $e) {
+                        // Jika penyimpanan penjualan gagal, rollback transaksi kurir juga
+                        DB::rollBack();
+                        header('Content-Type: application/json');
+                        http_response_code(500);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Gagal menyimpan produk penjualan: ' . $e->getMessage()
+                        ], 500);
+                    }
+                }
+                
+                Log::info('UDAH DISINI WEHH');
+                Log::info(json_encode($dtInsert));
+                $id_transaksi = DB::table('kurir_order')->insertGetId($dtInsert);
+
+                if ($req->is_favorite) {
+                    $cekExist = DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->first();
+                        
+                    if ($cekExist) {
+                        Log::info('EXIST');
+                        if ($req->is_favorite == false) {
+                            Log::info('HAPUS FAVORITE');
+                            DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->delete();
+                        } else {
+                            Log::info('EXIST NOT ACTION');
+                        }
+                    } else {
+                        Log::info('NOT EXIST');
+                        if ($req->is_favorite == true) {
+                            Log::info('INSERT');
+                            DB::table('rb_konsumen_favorite')
+                            ->insert([
+                                'id_user' => $getKurir->id_konsumen,
+                                'id_konsumen' => $id_pemesan
+                            ]);
+                        } else {
+                            Log::info('NOT EXIST NO ACTION');
+                        }
+                    }
+                } else {
+                    $cekExist = DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->first();
+                    if($cekExist){
+                        DB::table('rb_konsumen_favorite')->where('id_user',$getKurir->id_konsumen)->where('id_konsumen', $id_pemesan)->delete();
+                    }
+                    
+                }
+                
+                fcm_topic_live_order($id_transaksi);
+                
+
+                // if ($getKurir->agen == 1) {
+                    
+                //     DB::table('rb_wallet_users')->insert([
+                //         'id_konsumen' => $getKurir->id_konsumen,
+                //         'amount' => $potonganKomisi,
+                //         'trx_type' => 'debit',
+                //         'note' => 'Potongan admin kurir transaksi manual',
+                //         'created_at' => date('Y-m-d H:i:s'),
+                //         'source' => 'KURIR',
+                //         'source_id' => $id_transaksi
+                //     ]);
+
+                //     // Bagi komisi
+                //     $bagiKomisi = $this->pembagianKomisiKurir($potonganKomisi, $getKurir->id_sopir, $id_transaksi);
+                    
+                // }
+
+
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Sukses Menyimpan Transaksi Manual',
+                    'data' => [
+                        'id_transaksi' => $id_transaksi,
+                        'kode_order' => $dtInsert['kode_order']
+                    ]
+                ]);
+
+            } elseif ($req->btn_simpan == 'update') {
+                
+                DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Sukses Update Transaksi Manual',
+                    'data' => ['id_transaksi' => $req->id_transaksi]
+                ]);
+
+            } elseif ($req->btn_simpan == 'revisi') {
+
+                $dtInsert['status'] = 'RETURN';
+                $dtInsert['alasan_pembatalan'] = $req->alasan_revisi;
+                DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Transaksi dikembalikan untuk revisi',
+                    'data' => ['id_transaksi' => $req->id_transaksi]
+                ]);
+
+            } elseif ($req->btn_simpan == 'delete') {
+
+                $dtInsert['status'] = 'CANCEL';
+                $dtInsert['alasan_pembatalan'] = $req->alasan_pembatalan;
+                DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Transaksi dibatalkan',
+                    'data' => ['id_transaksi' => $req->id_transaksi]
+                ]);
+
+            } elseif ($req->btn_simpan == 'approve') {
+
+                if ($req->text_approve == 'SETUJU') {
+                    $dtInsert['status'] = 'FINISH';
+                    DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+
+                    $getKurirOrang = DB::table('rb_sopir as a')
+                        ->select('a.*')
+                        ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+                        ->where('a.id_sopir', $req->id_sopir)
+                        ->first();
+
+                    
+
+                    // Potong saldo untuk komisi
+                    // $dtPotongan = [
+                    //     'id_konsumen' => $getKurirOrang->id_konsumen,
+                    //     'nominal' => $potonganKomisi,
+                    //     'id_rekening' => 0,
+                    //     'withdraw_fee' => 0,
+                    //     'status' => 'Sukses',
+                    //     'transaksi' => 'kredit',
+                    //     'keterangan' => 'Potongan admin kurir transaksi manual',
+                    //     'akun' => 'sopir',
+                    //     'waktu_pendapatan' => date('Y-m-d H:i:s'),
+                    // ];
+                    // DB::table('rb_pendapatan_kurir')->insert($dtPotongan);
+
+                    DB::table('rb_wallet_users')->insert([
+                        'id_konsumen' => $getKurirOrang->id_konsumen,
+                        'amount' => $potonganKomisi,
+                        'trx_type' => 'debit',
+                        'note' => 'Potongan admin kurir transaksi manual',
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'source' => 'KURIR',
+                        'source_id' => $req->id_transaksi
+                    ]);
+
+                    // Bagi komisi
+                    $bagiKomisi = $this->pembagianKomisiKurir($potonganKomisi, $req->id_sopir, $req->id_transaksi);
+                    
+                    if ($bagiKomisi) {
+                        DB::commit();
+                        header('Content-Type: application/json');
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Sukses Approve Transaksi Manual, Komisi DiBagikan',
+                            'data' => ['id_transaksi' => $req->id_transaksi]
+                        ]);
+                    } else {
+                        DB::rollBack();
+                        header('Content-Type: application/json');
+                        http_response_code(500);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Gagal Menghitung Komisi'
+                        ], 500);
+                    }
+
+                } else {
+                    DB::rollBack();
+                    header('Content-Type: application/json');
+                    http_response_code(400);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Kata Yang Dimasukan Salah'
+                    ], 400);
+                }
+            }
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function ambilLiveOrder(Request $req)
+    {
+        $messages = [
+            'no_hp.required' => 'No HP Kurir Harus Diisi',
+            'id_transaksi.required' => 'Orderan tidak ditemukan',
+            'id_sopir.required' => 'Kurir tidak ditemukan',
+            'btn_simpan.required' => 'Ada kesalahan',
+        ];
+
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'id_transaksi' => 'required',
+            'id_sopir' => 'required',
+            'btn_simpan' => 'required',
+        ], $messages);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        // Find transaction (check both Transaksi and TransaksiManual tables)
+            $transaksi = DB::table('kurir_order')->where('id', $req->id_transaksi)->first();
+
+            if (!$transaksi) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi tidak ditemukan'
+                ], 404);
+            }
+
+        // Check if transaction is in PICKUP status
+            if (strtoupper($transaksi->status) !== 'SEARCH') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi sudah tidak tersedia'
+                ], 400);
+            }
+
+        try {
+            DB::beginTransaction();
+
+            // Get kurir data from no_hp
+            $getKurir = DB::table('rb_sopir as a')
+                ->select('a.*')
+                ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+                ->where('b.no_hp', $req->no_hp)
+                ->first();
+
+            if (!$getKurir) {
+                header('Content-Type: application/json');
+                http_response_code(404);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data kurir tidak ditemukan'
+                ], 404);
+            }
+
+            if ($req->btn_simpan == 'ambil_order') {
+                $dtInsert['id_sopir'] = $getKurir->id_sopir;
+                $dtInsert['status'] = 'PICKUP';
+                DB::table('kurir_order')->where('id', $req->id_transaksi)->update($dtInsert);
+
+                notifKonsumenNewOrder($req->id_transaksi);
+
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Sukses Update Transaksi Manual',
+                    'data' => ['id_transaksi' => $req->id_transaksi]
+                ]);
+
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+        
+    }
+
+    public function updateLiveOrder(Request $req)
+    {
+        Log::info($req->all());
+        
+        $messages = [
+            'no_hp.required' => 'No HP Kurir Harus Diisi',
+            'nama_layanan.required' => 'Nama Layanan Harus Dipilih',
+            'alamat_penjemputan.required' => 'Alamat Penjemputan Harus Diisi',
+            'alamat_tujuan.required' => 'Alamat Tujuan Harus Diisi',
+            'biaya_antar.required' => 'Biaya Antar Harus Diisi',
+            'biaya_antar.numeric' => 'Biaya Antar Harus Angka',
+            'nama_toko.required' => 'Nama Toko/Resto Harus Diisi',
+            'agen_kurir.required' => 'Agen Kurir Harus Diisi',
+            'no_hp_pelanggan_baru.required' => 'No HP Pelanggan Harus Diisi',
+            'no_hp_pelanggan_baru.numeric' => 'No HP Pelanggan Harus Angka Saja',
+        ];
+
+        $validator = \Validator::make($req->all(), [
+            'nama_layanan' => 'required',
+            'alamat_penjemputan' => 'required',
+            'alamat_tujuan' => 'required',
+            'biaya_antar' => 'required|numeric',
+        ], $messages);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Validasi untuk SHOP dan FOOD
+        if ($req->nama_layanan == 'SHOP' || $req->nama_layanan == 'FOOD') {
+            $validator_2 = \Validator::make($req->all(), [
+                'nama_toko' => 'required',
+            ], $messages);
+
+            if ($validator_2->fails()) {
+                header('Content-Type: application/json');
+                http_response_code(422);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Nama Toko/Resto Harus Diisi',
+                    'errors' => $validator_2->errors()
+                ], 422);
+            }
+        }
+
+        $getOrder = DB::table('kurir_order')->where('id',$req->id)->first();
+
+        if(!$getOrder){
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Order tidak ditemukan'
+            ], 404);
+        }
+
+        // Get kurir data from no_hp
+        $getKurir = DB::table('rb_sopir as a')
+            ->select('a.*')
+            ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+            ->where('a.id_konsumen', $getOrder->id_sopir)
+            ->first();
+
+        if (!$getKurir) {
+            header('Content-Type: application/json');
+            http_response_code(404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Data kurir tidak ditemukan'
+            ], 404);
+        }
+
+        // Hitung potongan komisi
+        // if ($getKurir->total_komisi != 0) {
+        //     $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+        // } else {
+        //     $potonganKomisi = $req->biaya_antar * ($this->getConfig('fee_kurir_total') / 100);
+        // }
+
+            $reffKonsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp_pelanggan )->first()->referral_id ?? '';
+            if ($getKurir->type_kurir == 'khusus') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_khusus_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_khusus') / 100);
+                    }
+                }
+            } else if ($getKurir->type_kurir == 'inti') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_inti_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_inti') / 100);
+                    }
+                }
+            } else {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_umum_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $req->biaya_antar * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $req->biaya_antar * ($this->getConfig('potongan_kurir_umum') / 100);
+                    }
+                }
+            }
+
+        $id_pemesan = $getOrder->id_pemesan;
+        if ($req->id_pemesan) {
+            $id_pemesan = $req->id_pemesan;
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Prepare data transaksi
+            // Source should be LIVE_ORDER for live order endpoint
+            $dtInsert = [
+                'source' => 'LIVE_ORDER',
+                'tarif' => $req->biaya_antar,
+                'id_pemesan' => $id_pemesan,
+                'alamat_jemput' => $req->alamat_penjemputan,
+                'alamat_antar' => $req->alamat_tujuan,
+                'jenis_layanan' => $req->nama_layanan,
+                'pemberi_barang' => $req->nama_toko ?? '',
+            ];
+            Log::info(json_encode($dtInsert));
+            
+            
+                
+                // Jika ada produk pada request, simpan sebagai penjualan + detail
+                if ($req->nama_layanan == 'SHOP' || $req->nama_layanan == 'FOOD') {
+                    $produk = json_decode($req->produk, true);
+                    try {
+                        // kode_transaksi 'LVO-yyyymmddhhiiss'
+                        $kodeTrans = 'LVO-' . date('YmdHis', strtotime($req->tanggal_order));
+
+                        
+
+                        if ($getOrder->id_penjualan > 0) {
+                            $id_penjualan = $getOrder->id_penjualan;
+
+                            $penjualan = [
+                                'ongkir' => $req->biaya_antar,
+                            ];
+
+                            DB::table('rb_penjualan')->where('id_penjualan', $id_penjualan)->update($penjualan);
+                        } else {
+                            $penjualan = [
+                                'kode_transaksi' => $kodeTrans,
+                                'id_pembeli' => $id_pemesan,
+                                'id_penjual' => 0,
+                                'status_pembeli' => 'konsumen',
+                                'status_penjual' => 'reseller',
+                                'kurir' => '-',
+                                'service' => '-',
+                                'ongkir' => $req->biaya_antar,
+                                'waktu_transaksi' => $req->tanggal_order,
+                                'proses' => 3,
+                            ];
+
+                            $id_penjualan = DB::table('rb_penjualan')->insertGetId($penjualan);
+                        }
+
+                        $dtInsert['id_penjualan'] = $id_penjualan;
+                        $barangNow = [];
+
+                        foreach ($produk as $p) {
+                            // cek existing produk
+                            
+                            if($p['id_barang'] != ''){
+                                array_push($barangNow, $p['id_barang']);
+
+                                $cekProdukExist = DB::table('rb_penjualan_detail')->where('id_produk', $p['id_barang'])->where('id_penjualan', $id_penjualan)->first();
+
+                                $detail = [
+                                    'jumlah' => $p['qty'],
+                                    'harga_jual' => $p['harga'],
+                                    'satuan' => $p['satuan'],
+                                    'nama_barang_insidential' => $p['nama_barang'],
+                                ];
+
+                                DB::table('rb_penjualan_detail')->where('id_penjualan_detail', $cekProdukExist->id_penjualan_detail)->update($detail);
+                            } else {
+                                // generate a pseudo product id using random number to avoid collisions
+                                $id_produk = mt_rand(1000000, 9999999);
+                                $jumlah = isset($p['qty']) ? (int)$p['qty'] : (int)($p->qty ?? 0);
+                                $harga_jual = isset($p['harga']) ? (float)$p['harga'] : (float)($p->harga ?? 0);
+                                $satuan = isset($p['satuan']) ? $p['satuan'] : ($p->satuan ?? '');
+                                $nama_barang = isset($p['nama_barang']) ? $p['nama_barang'] : ($p->nama_barang ?? '');
+
+                                array_push($barangNow, $id_produk);
+
+                                $detail = [
+                                    'id_penjualan' => $id_penjualan,
+                                    'id_produk' => $id_produk,
+                                    'jumlah' => $jumlah,
+                                    'harga_jual' => $harga_jual,
+                                    'fee_produk_end' => 0,
+                                    'satuan' => $satuan,
+                                    'markup_produk' => 0,
+                                    'nama_barang_insidential' => $nama_barang,
+                                    'harga_modal' => 0,
+                                ];
+
+                                DB::table('rb_penjualan_detail')->insert($detail);
+                            }
+                        }
+
+                        Log::info($barangNow);
+                        DB::table('rb_penjualan_detail')->whereNotIn('id_produk', $barangNow)->where('id_penjualan', $id_penjualan)->delete();
+
+
+                    } catch (\Exception $e) {
+                        // Jika penyimpanan penjualan gagal, rollback transaksi kurir juga
+                        DB::rollBack();
+                        header('Content-Type: application/json');
+                        http_response_code(500);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Gagal menyimpan produk penjualan: ' . $e->getMessage()
+                        ], 500);
+                    }
+                }
+
+                DB::table('kurir_order')->where('id', $getOrder->id)->update($dtInsert);
+                
+            
+                
+
+            
+                DB::commit();
+
+                header('Content-Type: application/json');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Sukses Update Transaksi Live',
+                    'data' => [
+                        'id_transaksi' => $getOrder->id,
+                        // 'kode_order' => $dtInsert['kode_order']
+                    ]
+                ]);
+
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+
+    }
+
+
+    public function getPenjualan(Request $req)
+    {
+        Log::info($req->all());
+        $id = $req->id_penjualan;
+        $transaction_detail = DB::table('rb_penjualan_detail')
+               ->select(
+                   'rb_penjualan_detail.*',
+                   DB::raw("IFNULL(rb_produk.nama_produk,rb_penjualan_detail.nama_barang_insidential) as nama_barang"),
+                   'rb_penjualan_detail.harga_jual as harga',
+                   'rb_penjualan_detail.jumlah as qty',
+                   'rb_penjualan_detail.diskon as diskon_per_item',
+                   'rb_penjualan_detail.nama_barang_insidential'
+               )
+               ->leftJoin('rb_produk', 'rb_penjualan_detail.id_produk', '=', 'rb_produk.id_produk')
+               ->where('rb_penjualan_detail.id_penjualan', $id)
+               ->get();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'message' => 'Sukses',
+            'data' => $transaction_detail
+        ]);
+    }
+
+
+    public function pickupOrder(Request $request)
+    {
+        try {
+            // Validate request data
+            $validator = \Validator::make($request->all(), [
+                'id_transaksi' => 'required|string',
+                'btn_simpan' => 'required|string',
+                'no_hp' => 'required|string',
+                'id_sopir' => 'required|string',
+                'customer_ready' => 'nullable|boolean', // For RIDE service
+                'foto_pickup' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120', // Max 5MB
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $idTransaksi = $request->input('id_transaksi');
+            $noHp = $request->input('no_hp');
+            $idSopir = $request->input('id_sopir');
+            $customerReady = $request->input('customer_ready');
+            $fotoPickup = $request->file('foto_pickup');
+
+            // Find transaction (check both Transaksi and TransaksiManual tables)
+            $transaksi = DB::table('kurir_order')->where('id', $idTransaksi)
+                ->orWhere('id', $idTransaksi)
+                ->first();
+
+            if (!$transaksi) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi tidak ditemukan'
+                ], 404);
+            }
+
+            $getKurir = DB::table('rb_sopir as a')
+                ->select('a.*')
+                ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+                ->where('a.id_konsumen', $idSopir)
+                ->first();
+
+            if (!$getKurir) {
+                header('Content-Type: application/json');
+                http_response_code(404);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data kurir tidak ditemukan'
+                ], 404);
+            }
+
+            $idSopir = $getKurir->id_sopir;
+
+            // Verify that the kurir is assigned to this transaction
+            if ($transaksi->id_sopir != $idSopir) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda tidak memiliki akses untuk transaksi ini '.$transaksi->id_sopir.' - '.$idSopir
+                ], 403);
+            }
+
+            // Check if transaction is in PICKUP status
+            if (strtoupper($transaksi->status) !== 'PICKUP') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi tidak dalam status PICKUP'
+                ], 400);
+            }
+
+            // Handle service-specific validations
+            $jenisLayanan = strtoupper($transaksi->jenis_layanan ?? $transaksi->nama_layanan ?? '');
+
+            if ($jenisLayanan === 'RIDE') {
+                // For RIDE service, check customer_ready
+                if ($customerReady !== true && $customerReady !== '1') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer harus sudah siap untuk layanan RIDE'
+                    ], 400);
+                }
+            } elseif (in_array($jenisLayanan, ['FOOD', 'SHOP', 'SEND'])) {
+                // For FOOD/SHOP/SEND services, check foto_pickup
+                if (!$fotoPickup) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Foto bukti pickup diperlukan untuk layanan ini'
+                    ], 400);
+                }
+            }
+
+            // Handle photo upload if provided
+            $fotoPickupPath = null;
+            if ($fotoPickup) {
+                // Generate unique filename
+                $filename = 'pickup_' . $idTransaksi . '_' . time() . '.' . $fotoPickup->getClientOriginalExtension();
+
+                // Store file in public storage
+                $fotoPickupPath = $fotoPickup->storeAs('pickup_photos', $filename, 'public');
+
+                // You can also use cloud storage like S3
+                // $fotoPickupPath = $fotoPickup->store('pickup_photos', 's3');
+            }
+
+            // Update transaction status to PROCESS
+            DB::table('kurir_order')->where('id', $idTransaksi)->update([
+                'status' => 'SEND',
+                'foto_ambil_barang' => $fotoPickupPath,
+                'waktu_ambil_barang' => now(),
+            ]);
+
+            // Log the pickup action
+            Log::info('Order pickup completed', [
+                'id_transaksi' => $idTransaksi,
+                'id_sopir' => $idSopir,
+                'jenis_layanan' => $jenisLayanan,
+                'foto_ambil_barang' => $fotoPickupPath,
+            ]);
+
+
+            // Broadcast status update via WebSocket if needed
+            // You can implement real-time updates here
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order berhasil di-pickup',
+                'data' => [
+                    'id_transaksi' => $transaksi->id,
+                    'status' => $transaksi->status,
+                    'foto_pickup' => $fotoPickupPath ? asset('storage/' . $fotoPickupPath) : null,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Pickup order error: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat memproses pickup order'
+            ], 500);
+        }
+    }
+
+    public function completeOrder(Request $request)
+    {
+        try {
+            // Validate request data
+            $validator = \Validator::make($request->all(), [
+                'id_transaksi' => 'required|string',
+                'btn_simpan' => 'required|string',
+                'no_hp' => 'required|string',
+                'id_sopir' => 'required|string',
+                'customer_received' => 'nullable|boolean', // For RIDE service
+                'foto_complete' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120', // Max 5MB
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $idTransaksi = $request->input('id_transaksi');
+            $noHp = $request->input('no_hp');
+            $idSopir = $request->input('id_sopir');
+            $customerReceived = $request->input('customer_received');
+            $fotoComplete = $request->file('foto_complete');
+
+            // Find transaction (check both Transaksi and TransaksiManual tables)
+            $transaksi = DB::table('kurir_order')->where('id', $idTransaksi)->first();
+
+            if (!$transaksi) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi tidak ditemukan'
+                ], 404);
+            }
+
+            $getKurir = DB::table('rb_sopir as a')
+                ->select('a.*')
+                ->leftJoin('rb_konsumen as b', 'b.id_konsumen', 'a.id_konsumen')
+                ->where('a.id_konsumen', $idSopir)
+                ->first();
+
+            if (!$getKurir) {
+                header('Content-Type: application/json');
+                http_response_code(404);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data kurir tidak ditemukan'
+                ], 404);
+            }
+
+            $idSopir = $getKurir->id_sopir;
+
+            // Verify that the kurir is assigned to this transaction
+            if ($transaksi->id_sopir != $idSopir) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda tidak memiliki akses untuk transaksi ini'
+                ], 403);
+            }
+
+            // Check if transaction is in SEND status
+            if (strtoupper($transaksi->status) !== 'SEND') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi tidak dalam status SEND'
+                ], 400);
+            }
+
+            // Handle service-specific validations
+            $jenisLayanan = strtoupper($transaksi->jenis_layanan ?? $transaksi->nama_layanan ?? '');
+
+            if ($jenisLayanan === 'RIDE') {
+                // For RIDE service, check customer_received
+                if ($customerReceived !== true && $customerReceived !== '1') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Pesanan harus sudah diterima customer untuk layanan RIDE'
+                    ], 400);
+                }
+            } elseif (in_array($jenisLayanan, ['FOOD', 'SHOP', 'SEND'])) {
+                // For FOOD/SHOP/SEND services, check foto_complete
+                if (!$fotoComplete) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Foto bukti penyelesaian diperlukan untuk layanan ini'
+                    ], 400);
+                }
+            }
+
+            // Handle photo upload if provided
+            $fotoCompletePath = null;
+            if ($fotoComplete) {
+                // Generate unique filename
+                $filename = 'complete_' . $idTransaksi . '_' . time() . '.' . $fotoComplete->getClientOriginalExtension();
+
+                // Store file in public storage
+                $fotoCompletePath = $fotoComplete->storeAs('complete_photos', $filename, 'public');
+
+                // You can also use cloud storage like S3
+                // $fotoCompletePath = $fotoComplete->store('complete_photos', 's3');
+            }
+
+            // Update transaction status to FINISH
+            DB::table('kurir_order')->where('id', $idTransaksi)->update([
+                'status' => 'FINISH',
+                'foto_serah_terima_barang' => $fotoCompletePath,
+                'waktu_serah_terima_barang' => now(),
+            ]);
+
+            // Broadcast status update via WebSocket if needed
+            // You can implement real-time updates here
+
+            // Hitung potongan komisi
+            // if ($getKurir->total_komisi != 0) {
+            //     $potonganKomisi = $transaksi->tarif * ($getKurir->total_komisi / 100);
+            // } else {
+            //     $potonganKomisi = $transaksi->tarif * ($this->getConfig('fee_kurir_total') / 100);
+            // }
+
+            $reffKonsumen = DB::table('rb_konsumen')->where('id_konsumen', $transaksi->id_pemesan)->first()->referral_id ?? '';
+            if ($getKurir->type_kurir == 'khusus') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $transaksi->tarif * ($this->getConfig('potongan_kurir_khusus_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $transaksi->tarif * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $transaksi->tarif * ($this->getConfig('potongan_kurir_khusus') / 100);
+                    }
+                }
+            } else if ($getKurir->type_kurir == 'inti') {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $transaksi->tarif * ($this->getConfig('potongan_kurir_inti_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $transaksi->tarif * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $transaksi->tarif * ($this->getConfig('potongan_kurir_inti') / 100);
+                    }
+                }
+            } else {
+                if($reffKonsumen == $getKurir->id_konsumen){
+                    $potonganKomisi = $transaksi->tarif * ($this->getConfig('potongan_kurir_umum_refferal') / 100);
+                } else {
+                    if($getKurir->total_komisi != 0){
+                        $potonganKomisi = $transaksi->tarif * ($getKurir->total_komisi / 100);
+                    } else {
+                        $potonganKomisi = $transaksi->tarif * ($this->getConfig('potongan_kurir_umum') / 100);
+                    }
+                }
+            }
+            
+
+
+            DB::table('rb_wallet_users')->insert([
+                        'id_konsumen' => $getKurir->id_konsumen,
+                        'amount' => $potonganKomisi,
+                        'trx_type' => 'debit',
+                        'note' => 'Potongan admin kurir transaksi live',
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'source' => 'KURIR',
+                        'source_id' => $idTransaksi
+                    ]);
+
+            $bagiKomisi = $this->pembagianKomisiKurir($potonganKomisi, $getKurir->id_sopir, $idTransaksi);
+
+            notifKonsumenFinishOrder($transaksi->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order berhasil diselesaikan',
+                'data' => [
+                    'id_transaksi' => $transaksi->id,
+                    'status' => $transaksi->status,
+                    'foto_complete' => $fotoCompletePath ? asset('storage/' . $fotoCompletePath) : null,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Complete order error: ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat memproses penyelesaian order'
+            ], 500);
+        }
+    }
+
+
+    public function getOrderDetail(Request $req)
+    {
+        Log::info('Get order detail request', ['request' => $req->all()]);
+        $id = $req->id_transaksi;
+        $transaction_detail = DB::table('kurir_order as a')
+                ->select('a.*', 'b.nama_lengkap as nama_sopir', 'b.no_hp as no_hp_sopir', 'b.id_konsumen as id_kurir', 'c.nama_lengkap as nama_pelanggan', 'c.no_hp as no_hp_pelanggan', 'e.nama_lengkap as nama_agen', 'e.no_hp as no_hp_agen')
+                ->leftJoin('rb_sopir as d','d.id_sopir','a.id_sopir')
+                ->leftJoin('rb_konsumen as b','b.id_konsumen','d.id_konsumen')
+                ->leftJoin('rb_konsumen as c','c.id_konsumen','a.id_pemesan')
+                ->leftJoin('rb_konsumen as e','e.id_konsumen','a.id_agen')
+                ->where('a.id', $id)
+                ->first();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'message' => 'Sukses',
+            'data' => $transaction_detail
+        ]);
+    }
+
+    public function getKomisi(Request $req)
+    {
+        Log::info('Get komisi request', ['request' => $req->all()]);
+        $id = $req->id_transaksi;
+        $user = DB::table('rb_konsumen')->where('id_konsumen', $req->id_user)->first();
+        $getTransaksi = DB::table('kurir_order as a')->select('b.id_konsumen')->leftJoin('rb_sopir as b','b.id_sopir','a.id_sopir')->where('a.id',$id)->first();
+
+        $transaction_detail = DB::table('rb_wallet_users as a')
+                ->select('a.*', 'b.nama_lengkap')
+                ->leftJoin('rb_konsumen as b','b.id_konsumen','a.id_konsumen')
+                ->where('a.source_id', $id);
+        
+        if($user->superadmin != 1){
+            $transaction_detail = $transaction_detail->where('a.id_konsumen', $user->id_konsumen);
+        };
+                
+                
+        $transaction_detail = $transaction_detail->where('a.source', 'KURIR')
+                ->where('a.trx_type', 'credit')
+                ->get();
+
+        foreach ($transaction_detail as $row) {
+            $row->superadmin_view = $user->superadmin == 1 ? true : false;
+        }
+        
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'message' => 'Sukses',
+            'data' => $transaction_detail
+        ]);
+    }
+
+    public function getPotonganAdmin(Request $req)
+    {
+        $id = $req->id_transaksi;
+        $transaction_detail = DB::table('rb_wallet_users as a')
+                ->select('a.*', 'b.nama_lengkap')
+                ->leftJoin('rb_konsumen as b','b.id_konsumen','a.id_konsumen')
+                ->where('a.source_id', $id)
+                ->where('a.source', 'KURIR')
+                ->where('a.trx_type', 'debit')
+                ->where('a.note', 'like', '%Potongan admin kurir%')
+                ->get();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'message' => 'Sukses',
+            'data' => $transaction_detail
+        ]);
+    }
+
+    public function getNotifications(Request $req)
+    {
+        $id_konsumen = $req->id_konsumen;
+
+        $notifications = DB::table('fcm_logs')
+            ->where('id_konsumen', $id_konsumen)
+            ->where('success', '1')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $notifications_new = DB::table('fcm_logs')
+            ->where('id_konsumen', $id_konsumen)
+            ->where('success', '1')
+            ->where('seen', '0')
+            ->count();
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success' => true,
+            'message' => 'Sukses',
+            'data' => ['notifications' => $notifications, 'notifications_new' => $notifications_new]
+        ]);
+    }
+
+    public function updateStatusOnline(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp'      => 'required',
+            'is_online'  => 'required|in:0,1',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+
+        if (!$konsumen) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kurir tidak ditemukan',
+            ], 404);
+        }
+
+        $sopir = DB::table('rb_sopir')->where('id_konsumen', $konsumen->id_konsumen)->first();
+
+        if (!$sopir) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data sopir tidak ditemukan',
+            ], 404);
+        }
+
+        $isOnline   = (int) $req->is_online;
+        $statusText = $isOnline ? 'online' : 'offline';
+        $now        = now();
+
+        DB::beginTransaction();
+        try {
+            // Update status di rb_sopir
+            $updateData = ['is_online' => $isOnline];
+            if ($isOnline) {
+                $updateData['last_online_at'] = $now;
+            }
+            DB::table('rb_sopir')
+                ->where('id_sopir', $sopir->id_sopir)
+                ->update($updateData);
+
+            // Catat log perubahan status
+            DB::table('rb_sopir_online_log')->insert([
+                'id_sopir'  => $sopir->id_sopir,
+                'status'    => $statusText,
+                'logged_at' => $now,
+            ]);
+
+            DB::commit();
+
+            // Notifikasi konfirmasi perubahan status (jangan gagalkan proses utama jika notif error)
+            try {
+                $title = $isOnline ? 'Status Online Aktif' : 'Status Online Nonaktif';
+                $body = $isOnline
+                    ? 'Anda sudah online dan siap menerima order.'
+                    : 'Anda sudah offline dan tidak menerima order baru.';
+
+                fcm_notify($konsumen->id_konsumen, $title, $body, [
+                    'type' => 'status_online_update',
+                    'is_online' => (string) $isOnline,
+                    'status' => $statusText,
+                    'updated_at' => (string) $now,
+                ]);
+            } catch (\Exception $notifEx) {
+                Log::warning('FCM notify updateStatusOnline gagal: ' . $notifEx->getMessage(), [
+                    'id_konsumen' => $konsumen->id_konsumen,
+                    'id_sopir' => $sopir->id_sopir,
+                    'is_online' => $isOnline,
+                ]);
+            }
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success'   => true,
+                'message'   => 'Status berhasil diperbarui',
+                'is_online' => $isOnline,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memperbarui status: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Rekap total waktu online sopir.
+     *
+     * Query params:
+     *   - no_hp   : wajib
+     *   - mode    : 'daily' | 'monthly' | 'all'  (default: 'daily')
+     *   - date    : untuk 'daily'   format Y-m-d  (default: hari ini)
+     *   - year    : untuk 'monthly' format Y      (default: tahun ini)
+     *   - month   : untuk 'monthly' format m      (default: bulan ini)
+     *
+     * Response:
+     *   - total_seconds  : total detik online
+     *   - total_minutes  : total menit online
+     *   - total_hours    : total jam online (dibulatkan 2 desimal)
+     *   - detail         : array pasangan [online → offline] (hanya untuk daily & monthly)
+     */
+    public function getRekapOnline(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'mode'  => 'nullable|in:daily,monthly,all',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+        if (!$konsumen) {
+            return response()->json(['success' => false, 'message' => 'Kurir tidak ditemukan'], 404);
+        }
+
+        $sopir = DB::table('rb_sopir')->where('id_konsumen', $konsumen->id_konsumen)->first();
+        if (!$sopir) {
+            return response()->json(['success' => false, 'message' => 'Data sopir tidak ditemukan'], 404);
+        }
+
+        $mode  = $req->input('mode', 'daily');
+        $query = DB::table('rb_sopir_online_log')
+                    ->where('id_sopir', $sopir->id_sopir)
+                    ->orderBy('logged_at', 'asc');
+
+        if ($mode === 'daily') {
+            $date = $req->input('date', now()->format('Y-m-d'));
+            $query->whereDate('logged_at', $date);
+        } elseif ($mode === 'monthly') {
+            $year  = $req->input('year',  now()->format('Y'));
+            $month = $req->input('month', now()->format('m'));
+            $query->whereYear('logged_at', $year)->whereMonth('logged_at', $month);
+        }
+        // 'all' → no extra filter
+
+        $logs = $query->get(['status', 'logged_at']);
+
+        // Hitung total detik online dengan mencocokkan pasangan online → offline
+        $totalSeconds = 0;
+        $detail       = [];
+        $pendingOnline = null;
+
+        foreach ($logs as $log) {
+            if ($log->status === 'online') {
+                $pendingOnline = $log->logged_at;
+            } elseif ($log->status === 'offline' && $pendingOnline !== null) {
+                $start    = strtotime($pendingOnline);
+                $end      = strtotime($log->logged_at);
+                $duration = max(0, $end - $start);
+                $totalSeconds += $duration;
+
+                $detail[] = [
+                    'online_at'        => $pendingOnline,
+                    'offline_at'       => $log->logged_at,
+                    'duration_seconds' => $duration,
+                    'duration_minutes' => round($duration / 60, 1),
+                ];
+
+                $pendingOnline = null;
+            }
+        }
+
+        // Kalau masih online sampai sekarang (tidak ada pasangan offline), hitung sampai now
+        if ($pendingOnline !== null) {
+            $start    = strtotime($pendingOnline);
+            $end      = time();
+            $duration = max(0, $end - $start);
+            $totalSeconds += $duration;
+
+            $detail[] = [
+                'online_at'        => $pendingOnline,
+                'offline_at'       => null, // masih online
+                'duration_seconds' => $duration,
+                'duration_minutes' => round($duration / 60, 1),
+            ];
+        }
+
+        header('Content-Type: application/json');
+        return response()->json([
+            'success'        => true,
+            'mode'           => $mode,
+            'total_seconds'  => $totalSeconds,
+            'total_minutes'  => round($totalSeconds / 60, 1),
+            'total_hours'    => round($totalSeconds / 3600, 2),
+            'is_online_now'  => (bool) $sopir->is_online,
+            'last_online_at' => $sopir->last_online_at ?? null,
+            'detail'         => $detail,
+        ]);
+    }
+
+    /**
+     * Statistik ringkas untuk dashboard kurir.
+     *
+     * Request params:
+     * - no_hp : wajib
+     * - type  : optional (semua|pasca_order|live_order)
+     *
+     * Response periods:
+     * - today
+     * - month
+     * - total
+     */
+    public function getStatistikRingkas(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'type'  => 'nullable|in:semua,all,pasca_order,live_order',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+        if (!$konsumen) {
+            return response()->json(['success' => false, 'message' => 'Kurir tidak ditemukan'], 404);
+        }
+
+        $sopir = DB::table('rb_sopir')->where('id_konsumen', $konsumen->id_konsumen)->first();
+        if (!$sopir) {
+            return response()->json(['success' => false, 'message' => 'Data sopir tidak ditemukan'], 404);
+        }
+
+        $sources = $this->resolveOrderSources($req->input('type', 'semua'));
+
+        $todayDate = now()->format('Y-m-d');
+        $monthStart = now()->startOfMonth()->format('Y-m-d');
+        $monthEnd = now()->endOfMonth()->format('Y-m-d');
+
+        $todayStats = $this->buildStatistikPeriod($sopir->id_sopir, $konsumen->id_konsumen, $sources, $todayDate, $todayDate);
+        $monthStats = $this->buildStatistikPeriod($sopir->id_sopir, $konsumen->id_konsumen, $sources, $monthStart, $monthEnd);
+        $totalStats = $this->buildStatistikPeriod($sopir->id_sopir, $konsumen->id_konsumen, $sources, null, null);
+
+        $mobileSummary = [
+            'pesananToday'               => $todayStats['orders_total'],
+            'pesananMonth'               => $monthStats['orders_total'],
+            'pesananAllDates'            => $totalStats['orders_total'],
+            'omsetToday'                 => $todayStats['omset_total'],
+            'omsetMonth'                 => $monthStats['omset_total'],
+            'omsetAllDates'              => $totalStats['omset_total'],
+            'pendapatanToday'            => $todayStats['pendapatan_total'],
+            'pendapatanMonth'            => $monthStats['pendapatan_total'],
+            'pendapatanAllDates'         => $totalStats['pendapatan_total'],
+            'komisiToday'                => $todayStats['komisi_total'],
+            'komisiMonth'                => $monthStats['komisi_total'],
+            'komisiAllDates'             => $totalStats['komisi_total'],
+            'pelangganBaruToday'         => $todayStats['pelanggan_baru'],
+            'pelangganBaruMonth'         => $monthStats['pelanggan_baru'],
+            'pelangganBaruAllDates'      => $totalStats['pelanggan_baru'],
+            'waktuOnlineMinutesToday'    => $todayStats['online_minutes'],
+            'waktuOnlineMinutesMonth'    => $monthStats['online_minutes'],
+            'waktuOnlineMinutesAllDates' => $totalStats['online_minutes'],
+        ];
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Statistik ringkas berhasil diambil',
+            'filter'   => [
+                'type'    => $req->input('type', 'semua'),
+                'sources' => $sources,
+            ],
+            'today'    => $todayStats,
+            'month'    => $monthStats,
+            'total'    => $totalStats,
+            'data'     => $mobileSummary,
+            'summary'  => [
+                // snake_case untuk backward compatibility
+                    'pesanan_today'              => $todayStats['orders_total'],
+                    'pesanan_month'              => $monthStats['orders_total'],
+                    'pesanan_total'              => $totalStats['orders_total'],
+                    'omset_today'                => $todayStats['omset_total'],
+                    'omset_month'                => $monthStats['omset_total'],
+                    'omset_total'                => $totalStats['omset_total'],
+                    'pendapatan_today'           => $todayStats['pendapatan_total'],
+                    'pendapatan_month'           => $monthStats['pendapatan_total'],
+                    'pendapatan_total'           => $totalStats['pendapatan_total'],
+                    'komisi_today'               => $todayStats['komisi_total'],
+                    'komisi_month'               => $monthStats['komisi_total'],
+                    'komisi_total'               => $totalStats['komisi_total'],
+                    'pelanggan_today'            => $todayStats['pelanggan_baru'],
+                    'pelanggan_month'            => $monthStats['pelanggan_baru'],
+                    'pelanggan_total'            => $totalStats['pelanggan_baru'],
+                    'online_minutes_today'       => $todayStats['online_minutes'],
+                    'online_minutes_month'       => $monthStats['online_minutes'],
+                    'online_minutes_total'       => $totalStats['online_minutes'],
+            ],
+        ]);
+    }
+
+    public function exportStatistikExcel(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'type'  => 'nullable|in:semua,all,pasca_order,live_order',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+        if (!$konsumen) {
+            return response()->json(['success' => false, 'message' => 'Kurir tidak ditemukan'], 404);
+        }
+
+        $sopir = DB::table('rb_sopir')->where('id_konsumen', $konsumen->id_konsumen)->first();
+        if (!$sopir) {
+            return response()->json(['success' => false, 'message' => 'Data sopir tidak ditemukan'], 404);
+        }
+
+        $type = $req->input('type', 'semua');
+        $sources = $this->resolveOrderSources($type);
+
+        $startDate = $req->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $req->input('end_date', now()->format('Y-m-d'));
+        $rangeStats = $this->buildStatistikPeriod($sopir->id_sopir, $konsumen->id_konsumen, $sources, $startDate, $endDate);
+
+        $sheetRows = [
+            ['Periode', 'Pesanan', 'Omset', 'Fee', 'Pendapatan', 'Komisi', 'Pelanggan', 'Online Menit'],
+            ['Range ' . $startDate . ' s/d ' . $endDate, $rangeStats['orders_total'], $rangeStats['omset_total'], $rangeStats['fee_total'], $rangeStats['pendapatan_total'], $rangeStats['komisi_total'], $rangeStats['pelanggan_baru'], $rangeStats['online_minutes']],
+        ];
+
+        $exportTarget = $this->resolveStatistikExportTarget();
+        if (!$exportTarget) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Folder export tidak bisa diakses. Pastikan permission folder public/ atau storage/ sudah benar.',
+            ], 500);
+        }
+
+        $exportDir = $exportTarget['dir'];
+        $baseUrl = $exportTarget['url'];
+        $this->cleanupOldStatistikExports($exportDir, 7);
+
+        $fileName = 'statistik-kurir-' . $sopir->id_sopir . '-' . now()->format('YmdHis') . '.xlsx';
+        $filePath = $exportDir . DIRECTORY_SEPARATOR . $fileName;
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Statistik Kurir');
+        $sheet->fromArray($sheetRows, null, 'A1');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($filePath);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Export Excel berhasil',
+            'data' => [
+                'filename' => $fileName,
+                'url' => rtrim($baseUrl, '/') . '/' . $fileName,
+                'type' => $type,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'summary' => [
+                    'pesanan' => $rangeStats['orders_total'],
+                    'omset' => $rangeStats['omset_total'],
+                    'fee' => $rangeStats['fee_total'],
+                    'pendapatan' => $rangeStats['pendapatan_total'],
+                    'komisi' => $rangeStats['komisi_total'],
+                    'pelanggan' => $rangeStats['pelanggan_baru'],
+                    'online_minutes' => $rangeStats['online_minutes'],
+                ],
+            ],
+        ]);
+    }
+
+    public function exportStatistikPdf(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'no_hp' => 'required',
+            'type'  => 'nullable|in:semua,all,pasca_order,live_order',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
+            'nama_kurir' => 'nullable|string|max:150',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $konsumen = DB::table('rb_konsumen')->where('no_hp', $req->no_hp)->first();
+        if (!$konsumen) {
+            return response()->json(['success' => false, 'message' => 'Kurir tidak ditemukan'], 404);
+        }
+
+        $sopir = DB::table('rb_sopir')->where('id_konsumen', $konsumen->id_konsumen)->first();
+        if (!$sopir) {
+            return response()->json(['success' => false, 'message' => 'Data sopir tidak ditemukan'], 404);
+        }
+
+        $type = $req->input('type', 'semua');
+        $sources = $this->resolveOrderSources($type);
+        $namaKurir = trim((string)$req->input('nama_kurir', ''));
+        if ($namaKurir === '') {
+            $namaKurir = trim((string)($konsumen->nama_lengkap ?? ''));
+        }
+        if ($namaKurir === '') {
+            $namaKurir = '-';
+        }
+
+          $startDate = $req->input('start_date', now()->startOfMonth()->format('Y-m-d'));
+          $endDate = $req->input('end_date', now()->format('Y-m-d'));
+          $rangeStats = $this->buildStatistikPeriod($sopir->id_sopir, $konsumen->id_konsumen, $sources, $startDate, $endDate);
+
+          $logoDataUri = $this->getStatistikLogoDataUri();
+
+          $html = '<html><head><style>'
+              . 'body{font-family:DejaVu Sans, sans-serif;font-size:12px;color:#1f2937;}'
+              . '.header{margin-bottom:12px;border-bottom:1px solid #e5e7eb;padding-bottom:10px;}'
+              . '.logo{height:46px;margin-bottom:6px;}'
+              . '.title{font-size:18px;font-weight:700;margin:0 0 4px 0;}'
+              . '.meta{font-size:11px;color:#4b5563;line-height:1.5;}'
+              . '.card{border:1px solid #d1d5db;border-radius:6px;overflow:hidden;}'
+              . '.card table{width:100%;border-collapse:collapse;}'
+              . '.card th{background:#f3f4f6;text-align:left;padding:8px;border-bottom:1px solid #d1d5db;font-size:11px;}'
+              . '.card td{padding:8px;border-bottom:1px solid #e5e7eb;}'
+              . '.card tr:last-child td{border-bottom:none;}'
+              . '.label{width:42%;font-weight:600;color:#374151;}'
+              . '.value{width:58%;text-align:right;font-weight:700;color:#111827;}'
+              . '</style></head><body>'
+              . '<div class="header">'
+              . ($logoDataUri ? '<img class="logo" src="' . $logoDataUri . '" alt="Logo" />' : '')
+              . '<p class="title">Laporan Statistik Kurir</p>'
+              . '<div class="meta">'
+              . 'No HP: ' . e($req->no_hp) . '<br>'
+              . 'Nama Kurir: ' . e($namaKurir) . '<br>'
+              . 'Filter: ' . e($type) . '<br>'
+              . 'Range: ' . e($startDate) . ' s/d ' . e($endDate) . '<br>'
+              . 'Generated: ' . e(now()->format('Y-m-d H:i:s'))
+              . '</div></div>'
+              . '<div class="card"><table>'
+              . '<thead><tr><th colspan="2">Ringkasan Statistik (Sesuai Filter Range)</th></tr></thead>'
+              . '<tbody>'
+              . '<tr><td class="label">Pesanan</td><td class="value">' . e($rangeStats['orders_total']) . '</td></tr>'
+              . '<tr><td class="label">Omset</td><td class="value">Rp ' . e(number_format((float)$rangeStats['omset_total'], 0, ',', '.')) . '</td></tr>'
+              . '<tr><td class="label">Potongan Tarif</td><td class="value">Rp ' . e(number_format((float)$rangeStats['fee_total'], 0, ',', '.')) . '</td></tr>'
+              . '<tr><td class="label">Pendapatan</td><td class="value">Rp ' . e(number_format((float)$rangeStats['pendapatan_total'], 0, ',', '.')) . '</td></tr>'
+              . '<tr><td class="label">Komisi</td><td class="value">Rp ' . e(number_format((float)$rangeStats['komisi_total'], 0, ',', '.')) . '</td></tr>'
+              . '<tr><td class="label">Pelanggan</td><td class="value">' . e($rangeStats['pelanggan_baru']) . '</td></tr>'
+              . '<tr><td class="label">Waktu Online</td><td class="value">' . e($rangeStats['online_minutes']) . ' menit</td></tr>'
+              . '</tbody></table></div>'
+              . '</body></html>';
+
+        $exportTarget = $this->resolveStatistikExportTarget();
+        if (!$exportTarget) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Folder export tidak bisa diakses. Pastikan permission folder public/ atau storage/ sudah benar.',
+            ], 500);
+        }
+
+        $exportDir = $exportTarget['dir'];
+        $baseUrl = $exportTarget['url'];
+        $this->cleanupOldStatistikExports($exportDir, 7);
+
+        $fileName = 'statistik-kurir-' . $sopir->id_sopir . '-' . now()->format('YmdHis') . '.pdf';
+        $filePath = $exportDir . DIRECTORY_SEPARATOR . $fileName;
+
+        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
+        $pdf->save($filePath);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Export PDF berhasil',
+            'data' => [
+                'filename' => $fileName,
+                'url' => rtrim($baseUrl, '/') . '/' . $fileName,
+                'type' => $type,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'summary' => [
+                    'pesanan' => $rangeStats['orders_total'],
+                    'omset' => $rangeStats['omset_total'],
+                    'fee' => $rangeStats['fee_total'],
+                    'pendapatan' => $rangeStats['pendapatan_total'],
+                    'komisi' => $rangeStats['komisi_total'],
+                    'pelanggan' => $rangeStats['pelanggan_baru'],
+                    'online_minutes' => $rangeStats['online_minutes'],
+                ],
+            ],
+        ]);
+    }
+
+    private function resolveStatistikExportTarget()
+    {
+        $targets = [
+            [
+                'dir' => public_path('exports/kurir'),
+                'url' => url('exports/kurir'),
+            ],
+            [
+                'dir' => storage_path('app/public/exports/kurir'),
+                'url' => url('storage/exports/kurir'),
+            ],
+        ];
+
+        foreach ($targets as $target) {
+            $dir = $target['dir'];
+
+            if (!is_dir($dir)) {
+                if (!@mkdir($dir, 0775, true) && !is_dir($dir)) {
+                    continue;
+                }
+            }
+
+            if (is_writable($dir)) {
+                return $target;
+            }
+        }
+
+        return null;
+    }
+
+    private function getStatistikLogoDataUri()
+    {
+        $logoPath = public_path('uploads/images/logo.png');
+        if (!is_file($logoPath)) {
+            return null;
+        }
+
+        $content = @file_get_contents($logoPath);
+        if ($content === false) {
+            return null;
+        }
+
+        return 'data:image/png;base64,' . base64_encode($content);
+    }
+
+    private function resolveOrderSources($type)
+    {
+        if ($type === 'pasca_order') {
+            return ['MANUAL_KURIR'];
+        }
+
+        if ($type === 'live_order') {
+            return ['LIVE_ORDER'];
+        }
+
+        return ['LIVE_ORDER', 'MANUAL_KURIR'];
+    }
+
+    private function cleanupOldStatistikExports($exportDir, $maxAgeDays = 7)
+    {
+        if (!is_dir($exportDir)) {
+            return;
+        }
+
+        $cutoff = time() - ((int)$maxAgeDays * 86400);
+        $patterns = [
+            $exportDir . DIRECTORY_SEPARATOR . 'statistik-kurir-*.xlsx',
+            $exportDir . DIRECTORY_SEPARATOR . 'statistik-kurir-*.pdf',
+        ];
+
+        foreach ($patterns as $pattern) {
+            foreach (glob($pattern) ?: [] as $filePath) {
+                if (!is_file($filePath)) {
+                    continue;
+                }
+
+                $fileMTime = @filemtime($filePath);
+                if ($fileMTime !== false && $fileMTime < $cutoff) {
+                    @unlink($filePath);
+                }
+            }
+        }
+    }
+
+    private function applyDateRangeToQuery($query, $column, $startDate = null, $endDate = null)
+    {
+        if ($startDate && $endDate) {
+            $query->whereBetween(DB::raw("DATE({$column})"), [$startDate, $endDate]);
+        }
+
+        return $query;
+    }
+
+    private function buildStatistikPeriod($idSopir, $idKonsumen, $sources, $startDate = null, $endDate = null)
+    {
+        // --- Pesanan & Omset (tarif bruto) ---
+        $ordersQuery = DB::table('kurir_order as a')
+            ->where('a.id_sopir', $idSopir)
+            ->where('a.status', 'FINISH')
+            ->whereIn('a.source', $sources);
+
+        $this->applyDateRangeToQuery($ordersQuery, 'a.tanggal_order', $startDate, $endDate);
+
+        $ordersCount = (clone $ordersQuery)->count();
+        $omsetTotal  = (float)((clone $ordersQuery)->sum('a.tarif') ?? 0);
+
+        // --- Fee / Potongan Admin (debit rb_wallet_users) ---
+        $feeQuery = DB::table('rb_wallet_users as w')
+            ->join('kurir_order as ko', 'ko.id', '=', 'w.source_id')
+            ->where('ko.id_sopir', $idSopir)
+            ->where('ko.status', 'FINISH')
+            ->whereIn('ko.source', $sources)
+            ->where('w.source', 'KURIR')
+            ->where('w.trx_type', 'debit');
+
+        $this->applyDateRangeToQuery($feeQuery, 'ko.tanggal_order', $startDate, $endDate);
+        $feeTotal = (float)($feeQuery->sum('w.amount') ?? 0);
+
+        $pendapatanTotal = $omsetTotal - $feeTotal;
+
+        // --- Komisi (credit), tanggal dari created_at ---
+        $komisiQuery = DB::table('rb_wallet_users as w')
+            ->where('w.id_konsumen', $idKonsumen)
+            ->where('w.source', 'KURIR')
+            ->where('w.trx_type', 'credit');
+
+        $this->applyDateRangeToQuery($komisiQuery, 'w.created_at', $startDate, $endDate);
+        $komisiTotal = (float)($komisiQuery->sum('w.amount') ?? 0);
+
+        // --- Pelanggan: referral_id = id_konsumen kurir, filter tanggal_daftar ---
+        $pelangganQuery = DB::table('rb_konsumen')
+            ->where('referral_id', $idKonsumen);
+
+        $this->applyDateRangeToQuery($pelangganQuery, 'tanggal_daftar', $startDate, $endDate);
+        $pelangganBaru = (int)$pelangganQuery->count();
+
+        $onlineSeconds = $this->calculateOnlineSeconds($idSopir, $startDate, $endDate);
+
+        return [
+            'orders_total'      => (int)$ordersCount,
+            'omset_total'       => round($omsetTotal, 2),
+            'fee_total'         => round($feeTotal, 2),
+            'pendapatan_total'  => round($pendapatanTotal, 2),
+            'komisi_total'      => round($komisiTotal, 2),
+            'pelanggan_baru'    => $pelangganBaru,
+            'online_seconds'    => (int)$onlineSeconds,
+            'online_minutes'    => round($onlineSeconds / 60, 1),
+            'online_hours'      => round($onlineSeconds / 3600, 2),
+            'period_start'      => $startDate,
+            'period_end'        => $endDate,
+        ];
+    }
+
+    private function calculateOnlineSeconds($idSopir, $startDate = null, $endDate = null)
+    {
+        $startAt = $startDate ? ($startDate . ' 00:00:00') : null;
+        $endAt = $endDate ? ($endDate . ' 23:59:59') : now()->format('Y-m-d H:i:s');
+
+        if ($endAt > now()->format('Y-m-d H:i:s')) {
+            $endAt = now()->format('Y-m-d H:i:s');
+        }
+
+        $logsQuery = DB::table('rb_sopir_online_log')
+            ->where('id_sopir', $idSopir)
+            ->orderBy('logged_at', 'asc');
+
+        if ($startAt && $endAt) {
+            $logsQuery->whereBetween('logged_at', [$startAt, $endAt]);
+        }
+
+        $logs = $logsQuery->get(['status', 'logged_at']);
+
+        $pendingOnline = null;
+
+        if ($startAt) {
+            $lastBeforeStart = DB::table('rb_sopir_online_log')
+                ->where('id_sopir', $idSopir)
+                ->where('logged_at', '<', $startAt)
+                ->orderBy('logged_at', 'desc')
+                ->first(['status', 'logged_at']);
+
+            if ($lastBeforeStart && $lastBeforeStart->status === 'online') {
+                $pendingOnline = $startAt;
+            }
+        }
+
+        $totalSeconds = 0;
+
+        foreach ($logs as $log) {
+            if ($log->status === 'online') {
+                $pendingOnline = $log->logged_at;
+            } elseif ($log->status === 'offline' && $pendingOnline !== null) {
+                $start = strtotime($pendingOnline);
+                $end = strtotime($log->logged_at);
+                $totalSeconds += max(0, ($end - $start));
+                $pendingOnline = null;
+            }
+        }
+
+        if ($pendingOnline !== null) {
+            $start = strtotime($pendingOnline);
+            $end = strtotime($endAt);
+            $totalSeconds += max(0, ($end - $start));
+        }
+
+        return (int)$totalSeconds;
+    }
+
+
+
+    /**
+     * Rekap Komisi - Ringkasan komisi berdasarkan tipe
+     * 
+     * Request params:
+     * - id_konsumen: int (required)
+     * - start_date: date (required) - format Y-m-d
+     * - end_date: date (required) - format Y-m-d
+     * 
+     * Response:
+     * {
+     *   success: true,
+     *   data: [
+     *     {
+     *       "type": "AGEN",
+     *       "total_credit": 1040,
+     *       "total_debit": 0,
+     *       "net_amount": 1040
+     *     },
+     *     ...
+     *   ],
+     *   summary: {
+     *     "total_credit": 5200,
+     *     "total_debit": 5200,
+     *     "net_total": 0
+     *   },
+     *   message: "Rekap komisi berhasil diambil"
+     * }
+     */
+    public function rekapKomisi(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'id_konsumen' => 'required|integer',
+            'start_date' => 'required|date_format:Y-m-d',
+            'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $idKonsumen = $req->input('id_konsumen');
+            $startDate = $req->input('start_date');
+            $endDate = $req->input('end_date');
+
+            // Query dengan GROUP BY type
+            $rekapData = DB::table('rb_wallet_users')
+                ->where('id_konsumen', $idKonsumen)
+                ->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
+                ->select(
+                    'type',
+                    DB::raw('SUM(CASE WHEN trx_type = ? THEN amount ELSE 0 END) as total_credit'),
+                    DB::raw('SUM(CASE WHEN trx_type = ? THEN amount ELSE 0 END) as total_debit'),
+                    DB::raw('SUM(CASE WHEN trx_type = ? THEN amount WHEN trx_type = ? THEN -amount ELSE 0 END) as net_amount'),
+                    DB::raw('COUNT(*) as jumlah_transaksi')
+                )
+                ->setBindings(['credit', 'debit', 'credit', 'debit'])
+                ->groupBy('type')
+                ->orderBy('net_amount', 'desc')
+                ->get();
+
+            // Hitung summary total
+            $summaryQuery = DB::table('rb_wallet_users')
+                ->where('id_konsumen', $idKonsumen)
+                ->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate])
+                ->selectRaw('
+                    SUM(CASE WHEN trx_type = ? THEN amount ELSE 0 END) as total_credit,
+                    SUM(CASE WHEN trx_type = ? THEN amount ELSE 0 END) as total_debit,
+                    SUM(CASE WHEN trx_type = ? THEN amount WHEN trx_type = ? THEN -amount ELSE 0 END) as net_total
+                ')
+                ->setBindings(['credit', 'debit', 'credit', 'debit'])
+                ->first();
+
+            // Format hasil
+            $formattedData = [];
+            foreach ($rekapData as $row) {
+                $formattedData[] = [
+                    'type' => $row->type,
+                    'total_credit' => (int)($row->total_credit ?? 0),
+                    'total_debit' => (int)($row->total_debit ?? 0),
+                    'net_amount' => (int)($row->net_amount ?? 0),
+                    'jumlah_transaksi' => (int)$row->jumlah_transaksi
+                ];
+            }
+
+            $summary = [
+                'total_credit' => (int)($summaryQuery->total_credit ?? 0),
+                'total_debit' => (int)($summaryQuery->total_debit ?? 0),
+                'net_total' => (int)($summaryQuery->net_total ?? 0)
+            ];
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Rekap komisi berhasil diambil',
+                'data' => $formattedData,
+                'summary' => $summary,
+                'period' => [
+                    'start_date' => $startDate,
+                    'end_date' => $endDate
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function rekapKomisiDetail(Request $req)
+    {
+        $validator = \Validator::make($req->all(), [
+            'id_konsumen' => 'required|integer',
+            'start_date' => 'required|date_format:Y-m-d',
+            'end_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
+        ]);
+
+        if ($validator->fails()) {
+            header('Content-Type: application/json');
+            http_response_code(422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $idKonsumen = $req->input('id_konsumen');
+            $startDate = $req->input('start_date');
+            $endDate = $req->input('end_date');
+
+            // ===== Hitung Saldo Awal =====
+            // Saldo awal = semua transaksi sebelum start_date
+            $saldoAwalQuery = DB::table('rb_wallet_users')
+                ->where('id_konsumen', $idKonsumen)
+                ->where(DB::raw('DATE(created_at)'), '<', $startDate)
+                ->selectRaw("
+                    SUM(CASE WHEN trx_type = 'credit' THEN amount ELSE 0 END) as total_credit,
+                    SUM(CASE WHEN trx_type = 'debit' THEN amount ELSE 0 END) as total_debit
+                ")
+                ->first();
+
+            $saldoAwal = (int)($saldoAwalQuery->total_credit ?? 0) - (int)($saldoAwalQuery->total_debit ?? 0);
+
+            // ===== Query Detail Transaksi =====
+            $detailData = DB::table('rb_wallet_users as w')
+                ->leftJoin('kurir_order as ko', 'ko.id', '=', 'w.source_id')
+                ->where('w.id_konsumen', $idKonsumen)
+                ->whereBetween(DB::raw('DATE(w.created_at)'), [$startDate, $endDate])
+                ->select(
+                    DB::raw('DATE(w.created_at) as tanggal'),
+                    'w.trx_type',
+                    'w.type',
+                    'w.amount',
+                    'w.created_at',
+                    'ko.kode_order',
+                    'w.source_id'
+                )
+                ->orderBy('w.source_id', 'asc')
+                ->orderByRaw("CASE WHEN w.trx_type = 'credit' THEN 0 ELSE 1 END, w.created_at asc")
+                ->get();
+
+            // ===== Format Detail dengan Saldo Running =====
+            $formattedDetail = [];
+            $saldoRunning = $saldoAwal;
+            $totalCredit = 0;
+            $totalDebit = 0;
+
+            foreach ($detailData as $row) {
+                if ($row->trx_type === 'credit') {
+                    $saldoRunning += $row->amount;
+                    $totalCredit += $row->amount;
+                } else { // debit
+                    $saldoRunning -= $row->amount;
+                    $totalDebit += $row->amount;
+                }
+
+                $formattedDetail[] = [
+                    'tanggal' => $row->tanggal,
+                    'tipe' => $row->trx_type == 'credit' ? 'debit' : 'credit',
+                    'type' => $row->type,
+                    'amount' => (int)$row->amount,
+                    'saldo' => $saldoRunning,
+                    'created_at' => $row->created_at,
+                    'kode_order' => $row->kode_order,
+                    'source_id' => $row->source_id
+                ];
+            }
+
+            $saldoAkhir = $saldoRunning;
+
+            // ===== Summary =====
+            $summary = [
+                'total_credit' => $totalCredit,
+                'total_debit' => $totalDebit,
+                'net_total' => $totalCredit - $totalDebit
+            ];
+
+            header('Content-Type: application/json');
+            return response()->json([
+                'success' => true,
+                'message' => 'Rekap komisi detail berhasil diambil',
+                'saldo_awal' => $saldoAwal,
+                'detail' => $formattedDetail,
+                'saldo_akhir' => $saldoAkhir,
+                'summary' => $summary,
+                'jumlah_transaksi' => count($formattedDetail),
+                'period' => [
+                    'start_date' => $startDate,
+                    'end_date' => $endDate
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+}

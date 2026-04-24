@@ -1658,10 +1658,81 @@ function HomeScreen() {
             };
 
             const getOrderValue = (item: any) => Number(item?.tarif ?? item?.total ?? item?.nominal ?? 0) || 0;
+            const currentUserId = userData?.id_konsumen ? String(userData.id_konsumen).trim() : '';
+
+            const toPositiveNumber = (value: any) => {
+                const parsed = Number(value ?? 0);
+                if (!Number.isFinite(parsed)) {
+                    return 0;
+                }
+                return Math.abs(parsed);
+            };
+
+            const getAgentCommissionAmount = (item: any) => {
+                const candidates = [
+                    item?.komisi_agen,
+                    item?.komisiAgen,
+                    item?.komisi_agent,
+                    item?.fee_agen,
+                    item?.nominal_komisi_agen,
+                    item?.amount_komisi_agen,
+                ];
+                return candidates.reduce((acc: number, candidate: any) => {
+                    const amount = toPositiveNumber(candidate);
+                    return amount > 0 ? amount : acc;
+                }, 0);
+            };
+
+            const getReferralCommissionAmount = (item: any) => {
+                const candidates = [
+                    item?.komisi_refferal,
+                    item?.komisi_referral,
+                    item?.komisiRefferal,
+                    item?.komisiReferral,
+                    item?.fee_refferal,
+                    item?.fee_referral,
+                    item?.nominal_komisi_refferal,
+                    item?.nominal_komisi_referral,
+                ];
+                return candidates.reduce((acc: number, candidate: any) => {
+                    const amount = toPositiveNumber(candidate);
+                    return amount > 0 ? amount : acc;
+                }, 0);
+            };
+
+            const getAgentOwnerId = (item: any) => {
+                const raw = item?.id_agen ?? item?.id_agent ?? item?.id_konsumen_agen ?? item?.agen_kurir ?? '';
+                return String(raw).trim();
+            };
+
+            const getReferralOwnerId = (item: any) => {
+                const raw = item?.id_refferal ?? item?.id_referral ?? item?.referral_id ?? item?.id_konsumen_referral ?? '';
+                return String(raw).trim();
+            };
+
+            const hasAgentCommission = (item: any) => {
+                const ownerId = getAgentOwnerId(item);
+                if (currentUserId && ownerId && ownerId === currentUserId) {
+                    return true;
+                }
+                return getAgentCommissionAmount(item) > 0;
+            };
+
+            const hasReferralCommission = (item: any) => {
+                const ownerId = getReferralOwnerId(item);
+                if (currentUserId && ownerId && ownerId === currentUserId) {
+                    return true;
+                }
+                return getReferralCommissionAmount(item) > 0;
+            };
 
             // Gabungkan semua orders (live + manual)
             const allOrders = [...liveOrdersRaw, ...manualOrdersRaw];
             const totalPemasukan = allOrders.reduce((sum, item) => sum + getOrderValue(item), 0);
+            const ordersKomisiAgen = allOrders.filter(hasAgentCommission);
+            const ordersKomisiRefferal = allOrders.filter(hasReferralCommission);
+            const totalKomisiAgenFromOrders = ordersKomisiAgen.reduce((sum, item) => sum + getAgentCommissionAmount(item), 0);
+            const totalKomisiRefferalFromOrders = ordersKomisiRefferal.reduce((sum, item) => sum + getReferralCommissionAmount(item), 0);
 
             const rekapKomisiRows = Array.isArray(rekapKomisiRes?.data?.data)
                 ? rekapKomisiRes.data.data
@@ -1732,6 +1803,8 @@ function HomeScreen() {
                 }
             }
 
+            
+
             const pelangganLines: string[] = [];
             pelangganLines.push(`Jumlah: ${ordersFromSelf.length}`);
             pelangganLines.push('');
@@ -1745,6 +1818,34 @@ function HomeScreen() {
                 });
             }
 
+            const komisiAgenLines: string[] = [];
+            komisiAgenLines.push(`Jumlah Pesanan Komisi Agen: ${ordersKomisiAgen.length}`);
+            komisiAgenLines.push(`Total Komisi Agen (dari detail order): ${formatCurrency(totalKomisiAgenFromOrders)}`);
+            komisiAgenLines.push('');
+            if (ordersKomisiAgen.length === 0) {
+                komisiAgenLines.push('Tidak ada pesanan komisi agen pada tanggal ini.');
+            } else {
+                ordersKomisiAgen.forEach((item: any, index: number) => {
+                    komisiAgenLines.push(
+                        `${index + 1}. *${getCustomerName(item)}* : ${getPickupLocation(item)} > ${getDestination(item)} : ${formatCurrency(getOrderValue(item))} | Komisi Agen: ${formatCurrency(getAgentCommissionAmount(item))}`
+                    );
+                });
+            }
+
+            const komisiRefferalLines: string[] = [];
+            komisiRefferalLines.push(`Jumlah Pesanan Komisi Refferal: ${ordersKomisiRefferal.length}`);
+            komisiRefferalLines.push(`Total Komisi Refferal (dari detail order): ${formatCurrency(totalKomisiRefferalFromOrders)}`);
+            komisiRefferalLines.push('');
+            if (ordersKomisiRefferal.length === 0) {
+                komisiRefferalLines.push('Tidak ada pesanan komisi refferal pada tanggal ini.');
+            } else {
+                ordersKomisiRefferal.forEach((item: any, index: number) => {
+                    komisiRefferalLines.push(
+                        `${index + 1}. *${getCustomerName(item)}* : ${getPickupLocation(item)} > ${getDestination(item)} : ${formatCurrency(getOrderValue(item))} | Komisi Refferal: ${formatCurrency(getReferralCommissionAmount(item))}`
+                    );
+                });
+            }
+
             const message = [
                 `Nama: ${kurirName}`,
                 `No HP: ${kurirPhone}`,
@@ -1754,21 +1855,10 @@ function HomeScreen() {
                 `Total Durasi ON: ${totalDurasiOn}`,
                 '',
                 '----------------------------------',
-                '',
+                `*Pendapatan dari Ongkir*`,
                 `Jumlah Pesanan: ${ordersFromAgent.length + ordersFromSelf.length}`,
-                `Total Pemasukan: ${formatCurrency(totalPemasukan)}`,
-                `Total Potongan: ${formatCurrency(komisiPotongan)}`,
-                '',
-                'Jumlah Pendapatan:',
-                `- Pendapatan Ongkir = ${formatCurrency(totalPemasukan-komisiPotongan)}`,
-                `- Komisi Koordinator Cabang = ${formatCurrency(komisiKoordinatorCabang)}`,
-                `- Komisi Koordinator Kurir = ${formatCurrency(komisiKoordinatorKurir)}`,
-                `- Komisi Agen = ${formatCurrency(komisiAgen)}`,
-                `- Komisi Refferal = ${formatCurrency(komisiRefferal)}`,
-                '',
-                `Total Pendapatan = ${formatCurrency(totalPendapatan)}`,
-                '',
-                '--------------------------------',
+                `Jumlah Ongkir: ${formatCurrency(totalPemasukan)}`,
+                '----------------------------------',
                 '',
                 '*Data Pesanan Pelanggan sendiri*',
                 '',
@@ -1777,6 +1867,38 @@ function HomeScreen() {
                 '*Data Pesanan dari Agen lain:*',
                 '',
                 ...agenLines,
+                '----------------------------------',
+                `Potongan Ongkir: ${formatCurrency(komisiPotongan)}`,
+                '----------------------------------',
+                '',
+                '*Pendapatan dari Komisi*',
+                `Jumlah Pesanan: ${ordersFromAgent.length + ordersFromSelf.length}`,
+                `Total Komisi: ${formatCurrency(komisiAgen+komisiRefferal)}`,
+
+                '',
+                '*List Pesanan Komisi Agen*',
+                ...komisiAgenLines,
+
+                '',
+                '*List Pesanan Komisi Refferal*',
+                ...komisiRefferalLines,
+
+
+                
+                // '',
+                // 'Jumlah Pendapatan:',
+                // `- Pendapatan Ongkir = ${formatCurrency(totalPemasukan-komisiPotongan)}`,
+                // `- Komisi Koordinator Cabang = ${formatCurrency(komisiKoordinatorCabang)}`,
+                // `- Komisi Koordinator Kurir = ${formatCurrency(komisiKoordinatorKurir)}`,
+                // `- Komisi Agen = ${formatCurrency(komisiAgen)}`,
+                // `- Komisi Refferal = ${formatCurrency(komisiRefferal)}`,
+                // '',
+                // `Total Pendapatan = ${formatCurrency(totalPendapatan)}`,
+                // '',
+                // '--------------------------------',
+                // '',
+                
+                
             ].join('\n');
 
             Clipboard.setString(message);
@@ -1787,7 +1909,7 @@ function HomeScreen() {
         } finally {
             setIsCopyingDailyRecap(false);
         }
-    }, [formatCurrency, formatDateForApi, formatDateForText, formatDateTimeForText, formatOnlineDuration, toArrayData, userData?.name, userData?.nama_lengkap, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
+    }, [formatCurrency, formatDateForApi, formatDateForText, formatDateTimeForText, formatOnlineDuration, toArrayData, userData?.id_konsumen, userData?.name, userData?.nama_lengkap, userData?.nama, userData?.nama_sopir, userData?.nm_sopir, userData?.no_hp]);
 
     // Menu items data
     const menuItems: any[] = [
